@@ -30,11 +30,13 @@ import {
   uninstallHermesSkill,
 } from "../hermes-skill-installer.mjs";
 import {
+  inspectOpenClawPlugin,
   installOpenClawPlugin,
   uninstallOpenClawPlugin,
 } from "../openclaw-installer.mjs";
 import {
   inspectRuntimeExecutableHealth,
+  inspectRuntimeWorkerSupport,
   installRuntimeWorkerSupport,
   uninstallRuntimeWorkerSupport,
 } from "../runtime-skill-installer.mjs";
@@ -61,8 +63,10 @@ const SUMMARY_SECTION_THEMES = {
   "Request entrypoints": "#22D3EE",
   "Agent runtimes": "#10A37F",
   MCP: "#4796E3",
+  "Mapped Projects": "#10A37F",
   "Matched Projects": "#10A37F",
   "Unmatched Projects": "#F59E0B",
+  "Next steps": "#F59E0B",
   "Install & Update": "#10A37F",
   "Project Setup": "#22D3EE",
   "Direct Dispatch (run without OpenClaw/Hermes)": "#D97757",
@@ -121,7 +125,7 @@ const HELP_SECTIONS = [
   },
   {
     title: "Info",
-    commands: [`${CLI_COMMAND_NAME} help`, `${CLI_COMMAND_NAME} --version`],
+    commands: [`${CLI_COMMAND_NAME} doctor`, `${CLI_COMMAND_NAME} help`, `${CLI_COMMAND_NAME} --version`],
   },
 ];
 
@@ -440,6 +444,9 @@ function describeInstallResultAction(result) {
   if (result.action === "unavailable") {
     return "unavailable";
   }
+  if (result.action === "needs_attention") {
+    return "attention";
+  }
   if (result.action === "failed") {
     return "failed";
   }
@@ -456,7 +463,12 @@ function describeInstallResultVersion(result) {
   const nextVersion = result.package_version ?? result.latest_version ?? result.version ?? null;
   const currentVersion = result.installed_version ?? null;
 
-  if (result.action === "updated" && currentVersion && nextVersion && currentVersion !== nextVersion) {
+  if (
+    (result.action === "updated" || result.action === "needs_attention") &&
+    currentVersion &&
+    nextVersion &&
+    currentVersion !== nextVersion
+  ) {
     return `${currentVersion} -> ${nextVersion}`;
   }
 
@@ -469,6 +481,10 @@ function describeInstallResultVersion(result) {
   }
 
   if (result.action === "not_enabled" && currentVersion) {
+    return currentVersion;
+  }
+
+  if (result.action === "needs_attention" && currentVersion) {
     return currentVersion;
   }
 
@@ -502,6 +518,9 @@ function describeInstallResultDetails(result) {
   }
   if (result.auth) {
     details.push(`auth: ${result.auth}`);
+  }
+  if (result.user_modified) {
+    details.push("local changes");
   }
   if (result.restart_command) {
     details.push(`restart: ${result.restart_command}`);
@@ -758,6 +777,79 @@ function formatInteractiveUpdateSummary(result) {
   return joinSummarySections("Update summary", sections);
 }
 
+function formatDoctorProjectMappingSections(projectMappings) {
+  if (!projectMappings) {
+    return [];
+  }
+
+  const projectEntries = Object.entries(projectMappings.projects ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  return [
+    formatSummarySection("Project Setup", [
+      {
+        label: "Project mappings",
+        status: projectMappings.total > 0 ? "ready" : "not configured",
+        details: projectMappings.mapping_file,
+      },
+      {
+        label: "Mapped projects",
+        status: projectMappings.total > 0 ? "ready" : "not configured",
+        details: `${projectMappings.total} configured`,
+      },
+      ...(projectMappings.missing.length > 0
+        ? [
+            {
+              label: "Missing paths",
+              status: "attention",
+              details: `${projectMappings.missing.length} missing`,
+            },
+          ]
+        : []),
+    ]),
+    formatSummarySection(
+      "Mapped Projects",
+      projectEntries.map(([projectKey, projectPath]) => ({
+        label: projectKey,
+        status: projectMappings.missing.some((entry) => entry.project_key === projectKey)
+          ? "attention"
+          : "ready",
+        details: projectPath,
+      })),
+    ),
+  ];
+}
+
+function formatDoctorSummary(result) {
+  const { hosts, support, mcp } = partitionSummaryRows(result.results ?? []);
+  const sections = [
+    formatSummarySection(
+      "Settings",
+      [
+        {
+          label: "Server URL",
+          status: result.server_url || "not configured",
+          details: "",
+        },
+        ...(result.mcp_url ? [{ label: "MCP endpoint", status: result.mcp_url, details: "" }] : []),
+      ],
+    ),
+    formatSummarySection("Request entrypoints", hosts),
+    formatSummarySection("Agent runtimes", support),
+    formatSummarySection("MCP", mcp),
+    ...formatDoctorProjectMappingSections(result.project_mappings),
+    formatSummarySection(
+      "Next steps",
+      result.recommendations.map((command) => ({
+        label: "Run",
+        status: command,
+        details: "",
+      })),
+    ),
+  ];
+  return joinSummarySections("Doctor summary", sections);
+}
+
 function formatInteractiveUninstallSummary(result) {
   const { hosts, support, mcp } = partitionSummaryRows(result.results ?? []);
   const sections = [
@@ -875,6 +967,97 @@ async function runSafeUpdateTarget(target, callback) {
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function runSafeDoctorTarget(target, callback) {
+  try {
+    return await callback();
+  } catch (error) {
+    return {
+      ok: false,
+      target,
+      action: "unavailable",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function normalizeHermesStatusForSummary(status) {
+  return {
+    ok: status?.ok !== false,
+    target: "hermes",
+    action:
+      !status?.installed
+        ? "not_installed"
+        : status.current && !status.user_modified
+          ? "already_current"
+          : "needs_attention",
+    installed_version: status?.installed_version ?? null,
+    version: status?.installed_version ?? null,
+    skill_file: status?.skill_file,
+    metadata_file: status?.metadata_file,
+    user_modified: Boolean(status?.user_modified),
+  };
+}
+
+async function inspectProjectMappings({ env }) {
+  const mappingPath = getProjectsFile(env);
+  const mappings = await readProjectMappings(mappingPath);
+  const entries = Object.entries(mappings.projects ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const missing = [];
+
+  for (const [projectKey, projectPath] of entries) {
+    const stat = await fs.stat(projectPath).catch(() => null);
+    if (!stat?.isDirectory()) {
+      missing.push({
+        project_key: projectKey,
+        project_path: projectPath,
+      });
+    }
+  }
+
+  return {
+    ok: entries.length > 0 && missing.length === 0,
+    mapping_file: mappingPath,
+    total: entries.length,
+    missing,
+    projects: Object.fromEntries(entries),
+  };
+}
+
+function isDoctorEntryHealthy(entry) {
+  if (entry?.ok === false) {
+    return false;
+  }
+  return !["failed", "unavailable", "needs_attention", "mcp_missing"].includes(entry?.action);
+}
+
+function buildDoctorRecommendations({ serverUrl, projectMappings, results }) {
+  const recommendations = [];
+  const add = (command) => {
+    if (!recommendations.includes(command)) {
+      recommendations.push(command);
+    }
+  };
+
+  if (
+    !serverUrl ||
+    results.some((entry) =>
+      ["not_installed", "not_enabled", "unavailable", "mcp_missing"].includes(entry?.action),
+    )
+  ) {
+    add(`${CLI_COMMAND_NAME} install`);
+  }
+  if (results.some((entry) => entry?.action === "needs_attention")) {
+    add(`${CLI_COMMAND_NAME} update`);
+  }
+  if (!projectMappings?.ok) {
+    add(`${CLI_COMMAND_NAME} setup auto`);
+  }
+
+  return recommendations;
 }
 
 async function performSetupAuto({
@@ -1194,6 +1377,109 @@ async function handleUninstallCommand({
   throw new Error(`Usage: ${CLI_COMMAND_NAME} uninstall [hermes|openclaw|claude-code|codex|gemini-cli]`);
 }
 
+async function handleDoctorCommand({
+  args,
+  stdout,
+  env,
+  inspectOpenClawPluginFn = inspectOpenClawPlugin,
+  getHermesSkillStatusFn = getHermesSkillStatus,
+  inspectRuntimeWorkerSupportFn = inspectRuntimeWorkerSupport,
+  inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
+  inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
+  resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
+}) {
+  const { options, positional } = parseOptions(args);
+  if (positional.length > 0) {
+    throw new Error(`Usage: ${CLI_COMMAND_NAME} doctor [--json]`);
+  }
+
+  const serverUrl = await resolveDefaultPreqstationServerUrlFn({
+    runtimes: UPDATE_RUNTIME_TARGETS,
+    env,
+  }).catch(() => null);
+  const projectMappings = await inspectProjectMappings({ env });
+  const results = [];
+
+  results.push(
+    await runSafeDoctorTarget("openclaw", () =>
+      inspectOpenClawPluginFn({
+        env,
+      }),
+    ),
+  );
+  results.push(
+    await runSafeDoctorTarget("hermes", async () =>
+      normalizeHermesStatusForSummary(await getHermesSkillStatusFn({ env })),
+    ),
+  );
+
+  const workerSupportResults = await runSafeDoctorTarget("agent-runtimes", () =>
+    inspectRuntimeWorkerSupportFn({
+      runtimes: UPDATE_RUNTIME_TARGETS,
+      env,
+    }),
+  );
+  results.push(
+    ...(Array.isArray(workerSupportResults)
+      ? workerSupportResults
+      : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...workerSupportResults, target }))),
+  );
+
+  const runtimeHealthResults = await runSafeDoctorTarget("runtime-executables", () =>
+    inspectRuntimeExecutableHealthFn({
+      runtimes: UPDATE_RUNTIME_TARGETS,
+      env,
+      launchHosts: UPDATE_HOST_TARGETS,
+    }),
+  );
+  results.push(
+    ...(Array.isArray(runtimeHealthResults)
+      ? runtimeHealthResults
+      : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...runtimeHealthResults, target }))),
+  );
+
+  const mcpResults = await runSafeDoctorTarget("mcp", () =>
+    inspectRuntimeMcpServersFn({
+      runtimes: UPDATE_RUNTIME_TARGETS,
+      env,
+    }),
+  );
+  results.push(
+    ...(Array.isArray(mcpResults)
+      ? mcpResults
+      : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...mcpResults, target }))),
+  );
+
+  const recommendations = buildDoctorRecommendations({
+    serverUrl,
+    projectMappings,
+    results,
+  });
+  const payload = {
+    ok: projectMappings.ok && results.every(isDoctorEntryHealthy),
+    action: "doctor",
+    server_url: serverUrl,
+    mcp_url: serverUrl ? buildPreqstationMcpUrl(serverUrl) : null,
+    project_mappings: projectMappings,
+    recommendations,
+    results,
+  };
+
+  if (stdout?.isTTY && options.json !== "true") {
+    renderInteractiveSummary({
+      stdout,
+      title: "Doctor summary",
+      summary: formatDoctorSummary(payload),
+      completeMessage: payload.ok ? "Doctor clean" : "Doctor needs attention",
+      env,
+    });
+  } else {
+    stdout.write(`${JSON.stringify(payload)}\n`);
+  }
+
+  return payload.ok ? 0 : 1;
+}
+
 async function handleUpdateCommand({
   args,
   stdout,
@@ -1361,11 +1647,13 @@ export async function runDispatcherCli({
   dispatchPreqRun = defaultDispatchPreqRun,
   runInstallWizard = defaultRunInstallWizard,
   runUninstallWizard = defaultRunUninstallWizard,
+  inspectOpenClawPluginFn = inspectOpenClawPlugin,
   getHermesSkillStatusFn = getHermesSkillStatus,
   syncHermesSkillFn = syncHermesSkill,
   uninstallHermesSkillFn = uninstallHermesSkill,
   installOpenClawPluginFn = installOpenClawPlugin,
   uninstallOpenClawPluginFn = uninstallOpenClawPlugin,
+  inspectRuntimeWorkerSupportFn = inspectRuntimeWorkerSupport,
   installRuntimeWorkerSupportFn = installRuntimeWorkerSupport,
   uninstallRuntimeWorkerSupportFn = uninstallRuntimeWorkerSupport,
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
@@ -1424,6 +1712,20 @@ export async function runDispatcherCli({
         uninstallOpenClawPluginFn,
         uninstallRuntimeWorkerSupportFn,
         uninstallRuntimeMcpServersFn,
+      });
+    }
+
+    if (command === "doctor") {
+      return handleDoctorCommand({
+        args,
+        stdout,
+        env,
+        inspectOpenClawPluginFn,
+        getHermesSkillStatusFn,
+        inspectRuntimeWorkerSupportFn,
+        inspectRuntimeExecutableHealthFn,
+        inspectRuntimeMcpServersFn,
+        resolveDefaultPreqstationServerUrlFn,
       });
     }
 

@@ -67,6 +67,7 @@ test("prints grouped help with the public preqstation command name", async () =>
   assert.match(help, /Info/);
   assert.match(help, /Advanced:/);
   assert.match(help, /preqstation uninstall\s*$/m);
+  assert.match(help, /preqstation doctor\s*$/m);
   assert.match(help, /preqstation setup auto\s*$/m);
   assert.match(help, /preqstation install hermes/);
   assert.match(help, /preqstation uninstall openclaw/);
@@ -74,6 +75,150 @@ test("prints grouped help with the public preqstation command name", async () =>
   assert.match(help, /preqstation run --project-key PROJ/);
   assert.doesNotMatch(help, /^Usage:/m);
   assert.doesNotMatch(help, /preqstation-dispatcher run/);
+});
+
+test("doctor reports read-only dispatcher health as json", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-doctor-"));
+  const projectPath = path.join(tempDir, "project");
+  const missingPath = path.join(tempDir, "missing");
+  const mappingPath = path.join(tempDir, "projects.json");
+  await fs.mkdir(projectPath);
+  await fs.writeFile(
+    mappingPath,
+    `${JSON.stringify({ projects: { PROJ: projectPath, MISS: missingPath } }, null, 2)}\n`,
+  );
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["doctor", "--json"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: { PREQSTATION_PROJECTS_FILE: mappingPath },
+    inspectOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+      installed_version: "0.1.36",
+      package_version: "0.1.36",
+    }),
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: true,
+      current: true,
+      installed_version: "0.1.36",
+    }),
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "already_current",
+        installed_version: "0.1.45",
+      })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+        resolved_path: `/usr/local/bin/${runtime}`,
+      })),
+    inspectRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "mcp_configured",
+        mcp_url: "https://preq.example.com/mcp",
+      })),
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    dispatchPreqRun: async () => {
+      throw new Error("doctor must not dispatch");
+    },
+  });
+
+  const result = JSON.parse(stdout.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(result.action, "doctor");
+  assert.equal(result.server_url, "https://preq.example.com");
+  assert.deepEqual(result.project_mappings.missing, [
+    { project_key: "MISS", project_path: missingPath },
+  ]);
+  assert.deepEqual(
+    result.results.map(({ target, action }) => ({ target, action })),
+    [
+      { target: "openclaw", action: "already_current" },
+      { target: "hermes", action: "already_current" },
+      { target: "claude-code", action: "already_current" },
+      { target: "codex", action: "already_current" },
+      { target: "gemini-cli", action: "already_current" },
+      { target: "claude-code", action: "ready" },
+      { target: "codex", action: "ready" },
+      { target: "gemini-cli", action: "ready" },
+      { target: "claude-code", action: "mcp_configured" },
+      { target: "codex", action: "mcp_configured" },
+      { target: "gemini-cli", action: "mcp_configured" },
+    ],
+  );
+});
+
+test("doctor renders a grouped interactive summary", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-doctor-tty-"));
+  const projectPath = path.join(tempDir, "project");
+  const mappingPath = path.join(tempDir, "projects.json");
+  await fs.mkdir(projectPath);
+  await fs.writeFile(mappingPath, `${JSON.stringify({ projects: { PROJ: projectPath } })}\n`);
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["doctor"],
+    stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 180 },
+    stderr: { write: () => {} },
+    env: { FORCE_COLOR: "1", PREQSTATION_PROJECTS_FILE: mappingPath },
+    inspectOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "not_installed",
+    }),
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: true,
+      current: true,
+      installed_version: "0.1.36",
+    }),
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({ ok: true, target: runtime, action: "not_installed" })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+        resolved_path: `/usr/local/bin/${runtime}`,
+      })),
+    inspectRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({ ok: true, target: runtime, action: "mcp_missing" })),
+    resolveDefaultPreqstationServerUrlFn: async () => null,
+    dispatchPreqRun: async () => {
+      throw new Error("doctor must not dispatch");
+    },
+  });
+
+  const rendered = stdout.join("");
+  const plain = stripAnsi(rendered);
+  assert.equal(exitCode, 1);
+  assert.match(plain, /Doctor summary/);
+  assert.match(plain, /Settings/);
+  assert.match(plain, /Project Setup/);
+  assert.match(plain, /Mapped Projects/);
+  assert.match(plain, new RegExp(`PROJ\\s+ready\\s+${escapeRegExp(projectPath)}`));
+  assert.match(plain, /Request entrypoints/);
+  assert.match(plain, /Hermes Agent\s+current\s+0\.1\.36/);
+  assert.match(plain, /Agent runtimes/);
+  assert.match(plain, /MCP/);
+  assert.match(plain, /Next steps/);
+  assert.match(plain, /Run\s+preqstation install/);
+  assert.doesNotMatch(plain, /^\{/m);
 });
 
 test("prints colored grouped help for TTY output", async () => {

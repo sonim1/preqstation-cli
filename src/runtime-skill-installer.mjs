@@ -526,6 +526,75 @@ export async function installRuntimeWorkerSupport({
   return results;
 }
 
+export async function inspectRuntimeWorkerSupport({
+  runtimes,
+  env = process.env,
+  exec = execFileAsync,
+  fetchFn = globalThis.fetch,
+  readFile = fs.readFile,
+} = {}) {
+  const runtimeTargets = Array.from(new Set((runtimes ?? []).filter(Boolean)));
+  const latestVersion = await fetchLatestPreqstationSkillVersion({ fetchFn }).catch(() => null);
+  const results = [];
+
+  for (const runtime of runtimeTargets) {
+    const runtimeConfig = RUNTIME_SKILL_TARGETS[runtime];
+    if (!runtimeConfig) {
+      throw new Error(
+        `Unsupported runtime target: ${runtime}. Expected one of ${SUPPORTED_RUNTIME_SKILL_TARGETS.join(", ")}`,
+      );
+    }
+
+    try {
+      if (runtimeConfig.type === "plugin") {
+        const pluginList = await exec("claude", ["plugin", "list"], { env });
+        const pluginInstalled = isClaudePluginInstalled(pluginList?.stdout ?? "");
+        const installedVersion = parseClaudePluginVersion(pluginList?.stdout ?? "");
+        results.push({
+          ok: true,
+          target: runtime,
+          action:
+            !pluginInstalled
+              ? "not_installed"
+              : latestVersion && installedVersion && installedVersion !== latestVersion
+                ? "needs_attention"
+                : "already_current",
+          installed_version: installedVersion,
+          latest_version: latestVersion,
+        });
+        continue;
+      }
+
+      const state = await inspectAgentSkillState({ runtime, env, exec, readFile });
+      const installedVersion = state.installedVersion ?? null;
+      results.push({
+        ok: true,
+        target: runtime,
+        action:
+          !state.agentInstalled
+            ? state.entries.length > 0
+              ? "not_enabled"
+              : "not_installed"
+            : latestVersion && installedVersion && installedVersion !== latestVersion
+              ? "needs_attention"
+              : "already_current",
+        installed_version: installedVersion,
+        latest_version: latestVersion,
+        configured_agents: state.configuredAgents,
+      });
+    } catch (error) {
+      results.push({
+        ok: false,
+        target: runtime,
+        action: "unavailable",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return results;
+}
+
 export async function uninstallRuntimeWorkerSupport({
   runtimes,
   env = process.env,

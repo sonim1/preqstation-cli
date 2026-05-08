@@ -45,6 +45,16 @@ test("README documents npm install as the default path and linked install for lo
   assert.match(readme, /Local linked install for active development/i);
 });
 
+test("README presents a compact standalone CLI command reference", async () => {
+  const readme = await readRepoFile("README.md");
+
+  assert.match(readme, /### Quick Start/);
+  assert.match(readme, /### Command Reference/);
+  assert.match(readme, /\| `preqstation doctor` \| Read-only health check/);
+  assert.match(readme, /\| `preqstation uninstall` \| Remove installed entrypoints/);
+  assert.match(readme, /Advanced commands/);
+});
+
 test("publish workflow releases the package on main pushes", async () => {
   const workflow = await readRepoFile(".github/workflows/publish.yml");
 

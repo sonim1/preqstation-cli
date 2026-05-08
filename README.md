@@ -101,30 +101,69 @@ If another runtime already populated `~/.preqstation-dispatch/projects.json`, Op
 
 ## Standalone CLI
 
-Install this package wherever the dispatcher host runs, then map each PREQ project to a local checkout.
-For Hermes, these setup commands are run once on the Hermes host by the operator.
-During real dispatch, Hermes Agent receives the Telegram message and calls this CLI through its terminal/tool execution.
+Install this package wherever the dispatcher host runs. For Hermes, these commands are run once on the Hermes host by the operator. During real dispatch, Hermes Agent receives the Telegram message and calls this CLI through its terminal/tool execution.
+
+### Quick Start
 
 ```bash
 npm install -g @sonim1/preqstation
 preqstation install
-preqstation uninstall
-preqstation install hermes
-preqstation setup set PROJ /absolute/path/to/project
-preqstation setup auto
-preqstation setup auto PROJ=https://github.com/example/project
-preqstation setup status
+preqstation doctor
 ```
 
-`install` without a target opens an interactive wizard that can install the OpenClaw adapter, the Hermes skill, and optional PREQ worker support for Claude Code, Codex, and Gemini CLI. Automation should call `install hermes` or `install openclaw` directly.
+`preqstation install` opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup. Run `preqstation doctor` afterward to verify the host without changing anything.
 
-`uninstall` opens the matching removal wizard. It removes selected request entrypoints, runtime MCP registrations, and runtime worker support, but keeps `~/.preqstation-dispatch/projects.json` and OAuth cache data. Use `uninstall hermes --force` only when you want to back up and remove a locally modified Hermes skill.
+### Command Reference
+
+| Command | Use |
+| --- | --- |
+| `preqstation install` | Interactive setup for OpenClaw, Hermes Agent, worker support, MCP, and project mappings. |
+| `preqstation update` | Refresh installed entrypoints and runtime support, then rerun MCP-backed project setup. |
+| `preqstation doctor` | Read-only health check for entrypoints, runtimes, MCP, and project mappings. |
+| `preqstation uninstall` | Remove installed entrypoints, runtime MCP registrations, and worker support while keeping local project mappings. |
+| `preqstation setup auto` | Fetch PREQ projects through MCP and map them to local git checkouts. |
+| `preqstation setup status` | Print the current shared project mappings. |
+| `preqstation run ...` | Dispatch directly without OpenClaw or Hermes. |
+
+Advanced commands:
+
+```bash
+preqstation install openclaw
+preqstation install hermes
+preqstation uninstall openclaw
+preqstation uninstall hermes
+preqstation sync hermes
+preqstation status hermes
+preqstation setup set PROJ /absolute/path/to/project
+preqstation setup auto PROJ=https://github.com/example/project
+preqstation run-message --message 'preqstation implement PROJ-327 using codex'
+preqstation run-json --payload /path/to/preq-webhook-payload.json
+```
+
+### Install, Update, Doctor
+
+`preqstation install` is idempotent. Existing runtime support is reported as `already current`, older installs are updated in place, matching MCP endpoints are reported as `already configured`, and project setup shows which PREQ projects were mapped or unmatched.
+
+`preqstation update` refreshes only what is already installed. It does not install missing targets, but it does rerun MCP-backed `setup auto` so local project mappings stay in sync with PREQSTATION.
+
+`preqstation doctor` does not install, update, remove, or open OAuth. It checks the current host and prints grouped status for:
+
+- PREQSTATION server URL and MCP endpoint
+- OpenClaw and Hermes Agent entrypoints
+- Claude Code, Codex, and Gemini CLI worker support
+- CLI executable paths, including session-scoped `fnm` path warnings
+- runtime MCP registrations
+- shared project mappings and missing local paths
+
+Use `preqstation doctor --json` for scripts.
+
+`preqstation uninstall` opens the matching removal wizard. It removes selected request entrypoints, runtime MCP registrations, and runtime worker support, but keeps `~/.preqstation-dispatch/projects.json` and OAuth cache data. Use `preqstation uninstall hermes --force` only when you want to back up and remove a locally modified Hermes skill.
 
 Hermes must have terminal/tool execution enabled. A chat-only Hermes profile cannot create worktrees or launch local worker CLIs.
 
-`install hermes` copies the bundled `preqstation_dispatch` Hermes skill into `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md` and writes provenance metadata next to it. Existing legacy `preq_dispatch` installs are migrated automatically when they were previously managed by this package.
+`preqstation install hermes` copies the bundled `preqstation_dispatch` Hermes skill into `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md` and writes provenance metadata next to it. Existing legacy `preq_dispatch` installs are migrated automatically when they were previously managed by this package.
 
-`install openclaw` runs:
+`preqstation install openclaw` runs:
 
 ```bash
 openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
@@ -132,7 +171,7 @@ openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
 
 Then restart OpenClaw with `openclaw gateway restart`.
 
-After upgrading the npm package, sync the installed Hermes skill:
+After upgrading the npm package, sync the installed Hermes skill when needed:
 
 ```bash
 npm update -g @sonim1/preqstation
@@ -142,22 +181,15 @@ preqstation status hermes
 
 If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
 
-`preqstation update` refreshes installed request entrypoints and installed runtime support without installing missing targets. It also runs MCP-backed `setup auto` so project mappings stay in sync with PREQSTATION after updates.
-
-If you choose agent runtimes during the interactive `install` wizard, the wizard prompts for the current PREQSTATION server URL and then:
-
-- installs or updates the PREQ Claude plugin for Claude Code
-- installs or updates the global `preqstation` worker skill for Codex and Gemini CLI
-- registers `preqstation` over the remote `/mcp` endpoint for each selected runtime
-- runs MCP-backed `setup auto`, opening browser OAuth when needed, to map PREQ projects to local git checkouts
-
-The wizard is idempotent. Existing runtime support is reported as `already current`, older installs are updated in place, and matching MCP endpoints are reported as `already configured`.
+### Project Setup
 
 `setup auto` without repo hints fetches PREQ projects from the configured remote `/mcp` endpoint with OAuth, then scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`. It matches local git `origin` URLs against PREQ project repo URLs and stores successful matches in `~/.preqstation-dispatch/projects.json`.
 
 `setup auto PROJ=https://github.com/example/project` keeps the previous explicit-hint behavior and skips fetching the project list from PREQSTATION.
 
-Run a dispatch directly:
+### Direct Dispatch
+
+Direct dispatch bypasses OpenClaw and Hermes and launches the selected worker from the CLI.
 
 ```bash
 preqstation run \
@@ -166,18 +198,6 @@ preqstation run \
   --objective implement \
   --engine codex \
   --branch-name task/proj-327-example
-```
-
-Run from an optional webhook payload file for adapter smoke tests:
-
-```bash
-preqstation run-json --payload /path/to/preq-webhook-payload.json
-```
-
-Run from a legacy dispatch message:
-
-```bash
-preqstation run-message --message 'preqstation implement PROJ-327 using codex'
 ```
 
 ### Public Config Contract
