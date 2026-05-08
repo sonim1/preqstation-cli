@@ -67,6 +67,7 @@ test("prints grouped help with the public preqstation command name", async () =>
   assert.match(help, /Info/);
   assert.match(help, /Advanced:/);
   assert.match(help, /preqstation uninstall\s*$/m);
+  assert.match(help, /preqstation status\s*$/m);
   assert.match(help, /preqstation doctor\s*$/m);
   assert.match(help, /preqstation setup auto\s*$/m);
   assert.match(help, /preqstation install hermes/);
@@ -75,6 +76,165 @@ test("prints grouped help with the public preqstation command name", async () =>
   assert.match(help, /preqstation run --project-key PROJ/);
   assert.doesNotMatch(help, /^Usage:/m);
   assert.doesNotMatch(help, /preqstation-dispatcher run/);
+});
+
+test("status reports overall install state instead of requiring hermes", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-status-"));
+  const projectPath = path.join(tempDir, "project");
+  const mappingPath = path.join(tempDir, "projects.json");
+  await fs.mkdir(projectPath);
+  await fs.writeFile(mappingPath, `${JSON.stringify({ projects: { PROJ: projectPath } })}\n`);
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["status", "--json"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: { PREQSTATION_PROJECTS_FILE: mappingPath },
+    inspectOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+      installed_version: "0.1.36",
+      package_version: "0.1.36",
+    }),
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: true,
+      current: true,
+      installed_version: "0.1.36",
+    }),
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "already_current",
+        installed_version: "0.1.45",
+      })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+        resolved_path: `/usr/local/bin/${runtime}`,
+      })),
+    inspectRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "mcp_configured",
+        mcp_url: "https://preq.example.com/mcp",
+      })),
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    dispatchPreqRun: async () => {
+      throw new Error("status must not dispatch");
+    },
+  });
+
+  const result = JSON.parse(stdout.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(result.action, "status");
+  assert.equal(result.server_url, "https://preq.example.com");
+  assert.equal(result.project_mappings.total, 1);
+  assert.deepEqual(
+    result.results.map(({ target, action }) => ({ target, action })),
+    [
+      { target: "openclaw", action: "already_current" },
+      { target: "hermes", action: "already_current" },
+      { target: "claude-code", action: "already_current" },
+      { target: "codex", action: "already_current" },
+      { target: "gemini-cli", action: "already_current" },
+      { target: "claude-code", action: "ready" },
+      { target: "codex", action: "ready" },
+      { target: "gemini-cli", action: "ready" },
+      { target: "claude-code", action: "mcp_configured" },
+      { target: "codex", action: "mcp_configured" },
+      { target: "gemini-cli", action: "mcp_configured" },
+    ],
+  );
+});
+
+test("status reports interactive progress while checking install state", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-status-progress-"));
+  const projectPath = path.join(tempDir, "project");
+  const mappingPath = path.join(tempDir, "projects.json");
+  await fs.mkdir(projectPath);
+  await fs.writeFile(mappingPath, `${JSON.stringify({ projects: { PROJ: projectPath } })}\n`);
+
+  const stdout = [];
+  const progress = [];
+  const clackUi = {
+    spinner: () => ({
+      start: (message) => progress.push(["start", message]),
+      stop: (message) => progress.push(["stop", message]),
+      error: (message) => progress.push(["error", message]),
+    }),
+    log: {
+      step: (message) => stdout.push(`${message}\n`),
+    },
+    box: (body, title) => stdout.push(`${title}\n${body}\n`),
+    note: (body, title) => stdout.push(`${title}\n${body}\n`),
+    outro: (message) => stdout.push(`${message}\n`),
+  };
+
+  const exitCode = await runDispatcherCli({
+    argv: ["status"],
+    stdout: { write: (value) => stdout.push(value), isTTY: true },
+    stderr: { write: () => {} },
+    env: { PREQSTATION_PROJECTS_FILE: mappingPath },
+    clackUi,
+    inspectOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+    }),
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: true,
+      current: true,
+    }),
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({ ok: true, target: runtime, action: "already_current" })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+        resolved_path: `/usr/local/bin/${runtime}`,
+      })),
+    inspectRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "mcp_configured",
+        mcp_url: "https://preq.example.com/mcp",
+      })),
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    dispatchPreqRun: async () => {
+      throw new Error("status must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(progress, [
+    ["start", "Checking PREQSTATION server URL"],
+    ["stop", "PREQSTATION server URL checked"],
+    ["start", "Checking project mappings"],
+    ["stop", "Project mappings checked"],
+    ["start", "Checking request entrypoints"],
+    ["stop", "Request entrypoints checked"],
+    ["start", "Checking agent runtime support"],
+    ["stop", "Agent runtime support checked"],
+    ["start", "Checking agent CLI paths"],
+    ["stop", "Agent CLI paths checked"],
+    ["start", "Checking MCP registrations"],
+    ["stop", "MCP registrations checked"],
+  ]);
+  assert.match(stdout.join(""), /Status summary/);
 });
 
 test("doctor reports read-only dispatcher health as json", async () => {

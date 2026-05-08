@@ -13,11 +13,12 @@ async function readRepoFile(name) {
 
 test("README describes the OpenClaw plugin install surface", async () => {
   const readme = await readRepoFile("README.md");
+  const installation = await readRepoFile("INSTALLATION.md");
 
   assert.match(readme, /openclaw\.plugin\.json/);
   assert.match(readme, /before_dispatch/);
   assert.match(readme, /detached codex/i);
-  assert.match(readme, /\/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>/);
+  assert.match(installation, /\/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>/);
 });
 
 test("README no longer documents PTY background monitoring as the runtime path", async () => {

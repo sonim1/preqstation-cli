@@ -44,161 +44,42 @@ Current flow:
 
 This is intentionally not the old PTY/background session model. The plugin does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
 
-### Install OpenClaw Adapter
+### Installation
 
-Default install from npm:
-
-```bash
-openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
-openclaw gateway restart
-```
-
-If the standalone CLI is already installed, it can run the plugin install command for you:
+Most users should install through the PREQSTATION CLI:
 
 ```bash
-preqstation install openclaw
-openclaw gateway restart
+npx -y @sonim1/preqstation@latest install
 ```
 
-This plugin intentionally uses `child_process` to create git worktrees and launch detached coding CLIs, so current OpenClaw builds require `--dangerously-force-unsafe-install` even for the npm package.
-
-Local linked install for active development:
-
-```bash
-openclaw plugins install --link --dangerously-force-unsafe-install /path/to/preqstation-dispatcher
-openclaw gateway restart
-```
-
-Useful checks:
-
-```bash
-openclaw plugins inspect preqstation-dispatcher
-openclaw status --all
-```
-
-### OpenClaw Setup
-
-After install, prefer the OpenClaw-native bulk setup command:
-
-```text
-/preqsetup auto PROJ=https://github.com/example/project
-```
-
-Useful setup commands:
-
-```text
-/preqsetup
-/preqsetup auto
-/preqsetup import
-/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>
-/preqsetup status
-/preqsetup unset PROJ
-```
-
-`/preqsetup auto` scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`, matches local git `origin` URLs against provided repo URLs, and stores successful matches in OpenClaw plugin config.
-
-If another runtime already populated `~/.preqstation-dispatch/projects.json`, OpenClaw can reuse it with `/preqsetup import`.
+The installer configures request entrypoints, worker runtime support, MCP registrations, and local project mappings. See [INSTALLATION.md](INSTALLATION.md) for direct OpenClaw/Hermes install commands, local development links, and troubleshooting notes.
 
 ## Standalone CLI
 
-Install this package wherever the dispatcher host runs. For Hermes, these commands are run once on the Hermes host by the operator. During real dispatch, Hermes Agent receives the Telegram message and calls this CLI through its terminal/tool execution.
+Install this package wherever the dispatcher host runs. For Hermes, run the installer once on the Hermes host. During real dispatch, Hermes Agent receives the Telegram message and calls this CLI through its terminal/tool execution.
 
 ### Quick Start
 
 ```bash
-npm install -g @sonim1/preqstation
-preqstation install
-preqstation doctor
+npx -y @sonim1/preqstation@latest install
+npx -y @sonim1/preqstation@latest status
 ```
 
-`preqstation install` opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup. Run `preqstation doctor` afterward to verify the host without changing anything.
+`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup. Run `preqstation status` afterward to verify the installed surface without changing anything.
 
 ### Command Reference
 
 | Command | Use |
 | --- | --- |
-| `preqstation install` | Interactive setup for OpenClaw, Hermes Agent, worker support, MCP, and project mappings. |
-| `preqstation update` | Refresh installed entrypoints and runtime support, then rerun MCP-backed project setup. |
-| `preqstation doctor` | Read-only health check for entrypoints, runtimes, MCP, and project mappings. |
+| `preqstation install` | Default interactive setup for entrypoints, runtimes, MCP, and project mappings. |
+| `preqstation update` | Refresh installed entrypoints and runtime support, then rerun project setup. |
+| `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, MCP, and project mappings. |
+| `preqstation doctor` | Read-only health check with the same status surface plus recommended next actions. |
 | `preqstation uninstall` | Remove installed entrypoints, runtime MCP registrations, and worker support while keeping local project mappings. |
 | `preqstation setup auto` | Fetch PREQ projects through MCP and map them to local git checkouts. |
-| `preqstation setup status` | Print the current shared project mappings. |
 | `preqstation run ...` | Dispatch directly without OpenClaw or Hermes. |
 
-Advanced commands:
-
-```bash
-preqstation install openclaw
-preqstation install hermes
-preqstation uninstall openclaw
-preqstation uninstall hermes
-preqstation sync hermes
-preqstation status hermes
-preqstation setup set PROJ /absolute/path/to/project
-preqstation setup auto PROJ=https://github.com/example/project
-preqstation run-message --message 'preqstation implement PROJ-327 using codex'
-preqstation run-json --payload /path/to/preq-webhook-payload.json
-```
-
-### Install, Update, Doctor
-
-`preqstation install` is idempotent. Existing runtime support is reported as `already current`, older installs are updated in place, matching MCP endpoints are reported as `already configured`, and project setup shows which PREQ projects were mapped or unmatched.
-
-`preqstation update` refreshes only what is already installed. It does not install missing targets, but it does rerun MCP-backed `setup auto` so local project mappings stay in sync with PREQSTATION.
-
-`preqstation doctor` does not install, update, remove, or open OAuth. It checks the current host and prints grouped status for:
-
-- PREQSTATION server URL and MCP endpoint
-- OpenClaw and Hermes Agent entrypoints
-- Claude Code, Codex, and Gemini CLI worker support
-- CLI executable paths, including session-scoped `fnm` path warnings
-- runtime MCP registrations
-- shared project mappings and missing local paths
-
-Use `preqstation doctor --json` for scripts.
-
-`preqstation uninstall` opens the matching removal wizard. It removes selected request entrypoints, runtime MCP registrations, and runtime worker support, but keeps `~/.preqstation-dispatch/projects.json` and OAuth cache data. Use `preqstation uninstall hermes --force` only when you want to back up and remove a locally modified Hermes skill.
-
-Hermes must have terminal/tool execution enabled. A chat-only Hermes profile cannot create worktrees or launch local worker CLIs.
-
-`preqstation install hermes` copies the bundled `preqstation_dispatch` Hermes skill into `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md` and writes provenance metadata next to it. Existing legacy `preq_dispatch` installs are migrated automatically when they were previously managed by this package.
-
-`preqstation install openclaw` runs:
-
-```bash
-openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
-```
-
-Then restart OpenClaw with `openclaw gateway restart`.
-
-After upgrading the npm package, sync the installed Hermes skill when needed:
-
-```bash
-npm update -g @sonim1/preqstation
-preqstation sync hermes
-preqstation status hermes
-```
-
-If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
-
-### Project Setup
-
-`setup auto` without repo hints fetches PREQ projects from the configured remote `/mcp` endpoint with OAuth, then scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`. It matches local git `origin` URLs against PREQ project repo URLs and stores successful matches in `~/.preqstation-dispatch/projects.json`.
-
-`setup auto PROJ=https://github.com/example/project` keeps the previous explicit-hint behavior and skips fetching the project list from PREQSTATION.
-
-### Direct Dispatch
-
-Direct dispatch bypasses OpenClaw and Hermes and launches the selected worker from the CLI.
-
-```bash
-preqstation run \
-  --project-key PROJ \
-  --task-key PROJ-327 \
-  --objective implement \
-  --engine codex \
-  --branch-name task/proj-327-example
-```
+Detailed install, update, uninstall, project setup, and direct dispatch examples live in [INSTALLATION.md](INSTALLATION.md).
 
 ### Public Config Contract
 

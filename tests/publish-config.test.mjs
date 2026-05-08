@@ -27,6 +27,7 @@ test("package metadata is publishable to the public npm registry", async () => {
     "index.mjs",
     "src",
     "openclaw.plugin.json",
+    "INSTALLATION.md",
     "README.md",
     "MEMORY.md",
     "SKILL.md",
@@ -34,15 +35,16 @@ test("package metadata is publishable to the public npm registry", async () => {
   ]);
 });
 
-test("README documents npm install as the default path and linked install for local development", async () => {
+test("README documents the default installer and points detailed install notes elsewhere", async () => {
   const readme = await readRepoFile("README.md");
 
-  assert.match(
+  assert.match(readme, /npx -y @sonim1\/preqstation@latest install/);
+  assert.match(readme, /See \[INSTALLATION\.md\]\(INSTALLATION\.md\)/);
+  assert.match(readme, /OpenClaw plugin id is `preqstation-dispatcher`/);
+  assert.doesNotMatch(
     readme,
     /openclaw plugins install @sonim1\/preqstation --dangerously-force-unsafe-install/,
   );
-  assert.match(readme, /OpenClaw plugin id is `preqstation-dispatcher`/);
-  assert.match(readme, /Local linked install for active development/i);
 });
 
 test("README presents a compact standalone CLI command reference", async () => {
@@ -50,9 +52,19 @@ test("README presents a compact standalone CLI command reference", async () => {
 
   assert.match(readme, /### Quick Start/);
   assert.match(readme, /### Command Reference/);
+  assert.match(readme, /\| `preqstation status` \| Read-only installed-state summary/);
   assert.match(readme, /\| `preqstation doctor` \| Read-only health check/);
   assert.match(readme, /\| `preqstation uninstall` \| Remove installed entrypoints/);
-  assert.match(readme, /Advanced commands/);
+  assert.doesNotMatch(readme, /Advanced commands/);
+});
+
+test("INSTALLATION documents detailed install flows", async () => {
+  const installation = await readRepoFile("INSTALLATION.md");
+
+  assert.match(installation, /openclaw plugins install @sonim1\/preqstation --dangerously-force-unsafe-install/);
+  assert.match(installation, /Local Development/);
+  assert.match(installation, /preqstation sync hermes/);
+  assert.match(installation, /preqstation setup auto PROJ=https:\/\/github\.com\/example\/project/);
 });
 
 test("publish workflow releases the package on main pushes", async () => {

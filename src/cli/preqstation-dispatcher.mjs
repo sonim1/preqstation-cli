@@ -6,6 +6,7 @@ import {
   log as clackLog,
   note as clackNote,
   outro as clackOutro,
+  spinner as clackSpinner,
 } from "@clack/prompts";
 
 import { dispatchPreqRun as defaultDispatchPreqRun } from "../core/dispatch-runtime.mjs";
@@ -56,6 +57,7 @@ const DEFAULT_CLACK_SUMMARY_UI = {
   log: clackLog,
   note: clackNote,
   outro: clackOutro,
+  spinner: clackSpinner,
 };
 
 const SUMMARY_SECTION_THEMES = {
@@ -125,7 +127,12 @@ const HELP_SECTIONS = [
   },
   {
     title: "Info",
-    commands: [`${CLI_COMMAND_NAME} doctor`, `${CLI_COMMAND_NAME} help`, `${CLI_COMMAND_NAME} --version`],
+    commands: [
+      `${CLI_COMMAND_NAME} status`,
+      `${CLI_COMMAND_NAME} doctor`,
+      `${CLI_COMMAND_NAME} help`,
+      `${CLI_COMMAND_NAME} --version`,
+    ],
   },
 ];
 
@@ -935,6 +942,32 @@ function renderInteractiveSummary({
   clackUi.outro(completeMessage, { output: stdout });
 }
 
+function canRenderProgress({ stdout, options, clackUi }) {
+  return Boolean(
+    stdout?.isTTY &&
+      options.json !== "true" &&
+      typeof clackUi?.spinner === "function" &&
+      (clackUi.spinner !== clackSpinner || typeof stdout.on === "function"),
+  );
+}
+
+async function runProgressStep({ stdout, clackUi, title, done, enabled, task }) {
+  if (!enabled) {
+    return task();
+  }
+
+  const progress = clackUi.spinner({ output: stdout });
+  progress.start(title);
+  try {
+    const result = await task();
+    progress.stop(done);
+    return result;
+  } catch (error) {
+    progress.error?.(`${title} failed`);
+    throw error;
+  }
+}
+
 function isMissingExecutableError(error) {
   return error?.code === "ENOENT";
 }
@@ -1381,6 +1414,12 @@ async function handleDoctorCommand({
   args,
   stdout,
   env,
+  clackUi = DEFAULT_CLACK_SUMMARY_UI,
+  action = "doctor",
+  usageCommand = "doctor",
+  summaryTitle = "Doctor summary",
+  cleanMessage = "Doctor clean",
+  attentionMessage = "Doctor needs attention",
   inspectOpenClawPluginFn = inspectOpenClawPlugin,
   getHermesSkillStatusFn = getHermesSkillStatus,
   inspectRuntimeWorkerSupportFn = inspectRuntimeWorkerSupport,
@@ -1390,60 +1429,106 @@ async function handleDoctorCommand({
 }) {
   const { options, positional } = parseOptions(args);
   if (positional.length > 0) {
-    throw new Error(`Usage: ${CLI_COMMAND_NAME} doctor [--json]`);
+    throw new Error(`Usage: ${CLI_COMMAND_NAME} ${usageCommand} [--json]`);
   }
 
-  const serverUrl = await resolveDefaultPreqstationServerUrlFn({
-    runtimes: UPDATE_RUNTIME_TARGETS,
-    env,
-  }).catch(() => null);
-  const projectMappings = await inspectProjectMappings({ env });
+  const progressEnabled = canRenderProgress({ stdout, options, clackUi });
+  const serverUrl = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking PREQSTATION server URL",
+    done: "PREQSTATION server URL checked",
+    task: () =>
+      resolveDefaultPreqstationServerUrlFn({
+        runtimes: UPDATE_RUNTIME_TARGETS,
+        env,
+      }).catch(() => null),
+  });
+  const projectMappings = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking project mappings",
+    done: "Project mappings checked",
+    task: () => inspectProjectMappings({ env }),
+  });
   const results = [];
 
-  results.push(
-    await runSafeDoctorTarget("openclaw", () =>
-      inspectOpenClawPluginFn({
-        env,
-      }),
-    ),
-  );
-  results.push(
-    await runSafeDoctorTarget("hermes", async () =>
-      normalizeHermesStatusForSummary(await getHermesSkillStatusFn({ env })),
-    ),
-  );
+  const entrypointResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking request entrypoints",
+    done: "Request entrypoints checked",
+    task: async () => [
+      await runSafeDoctorTarget("openclaw", () =>
+        inspectOpenClawPluginFn({
+          env,
+        }),
+      ),
+      await runSafeDoctorTarget("hermes", async () =>
+        normalizeHermesStatusForSummary(await getHermesSkillStatusFn({ env })),
+      ),
+    ],
+  });
+  results.push(...entrypointResults);
 
-  const workerSupportResults = await runSafeDoctorTarget("agent-runtimes", () =>
-    inspectRuntimeWorkerSupportFn({
-      runtimes: UPDATE_RUNTIME_TARGETS,
-      env,
-    }),
-  );
+  const workerSupportResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking agent runtime support",
+    done: "Agent runtime support checked",
+    task: () =>
+      runSafeDoctorTarget("agent-runtimes", () =>
+        inspectRuntimeWorkerSupportFn({
+          runtimes: UPDATE_RUNTIME_TARGETS,
+          env,
+        }),
+      ),
+  });
   results.push(
     ...(Array.isArray(workerSupportResults)
       ? workerSupportResults
       : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...workerSupportResults, target }))),
   );
 
-  const runtimeHealthResults = await runSafeDoctorTarget("runtime-executables", () =>
-    inspectRuntimeExecutableHealthFn({
-      runtimes: UPDATE_RUNTIME_TARGETS,
-      env,
-      launchHosts: UPDATE_HOST_TARGETS,
-    }),
-  );
+  const runtimeHealthResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking agent CLI paths",
+    done: "Agent CLI paths checked",
+    task: () =>
+      runSafeDoctorTarget("runtime-executables", () =>
+        inspectRuntimeExecutableHealthFn({
+          runtimes: UPDATE_RUNTIME_TARGETS,
+          env,
+          launchHosts: UPDATE_HOST_TARGETS,
+        }),
+      ),
+  });
   results.push(
     ...(Array.isArray(runtimeHealthResults)
       ? runtimeHealthResults
       : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...runtimeHealthResults, target }))),
   );
 
-  const mcpResults = await runSafeDoctorTarget("mcp", () =>
-    inspectRuntimeMcpServersFn({
-      runtimes: UPDATE_RUNTIME_TARGETS,
-      env,
-    }),
-  );
+  const mcpResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking MCP registrations",
+    done: "MCP registrations checked",
+    task: () =>
+      runSafeDoctorTarget("mcp", () =>
+        inspectRuntimeMcpServersFn({
+          runtimes: UPDATE_RUNTIME_TARGETS,
+          env,
+        }),
+      ),
+  });
   results.push(
     ...(Array.isArray(mcpResults)
       ? mcpResults
@@ -1457,7 +1542,7 @@ async function handleDoctorCommand({
   });
   const payload = {
     ok: projectMappings.ok && results.every(isDoctorEntryHealthy),
-    action: "doctor",
+    action,
     server_url: serverUrl,
     mcp_url: serverUrl ? buildPreqstationMcpUrl(serverUrl) : null,
     project_mappings: projectMappings,
@@ -1468,10 +1553,11 @@ async function handleDoctorCommand({
   if (stdout?.isTTY && options.json !== "true") {
     renderInteractiveSummary({
       stdout,
-      title: "Doctor summary",
-      summary: formatDoctorSummary(payload),
-      completeMessage: payload.ok ? "Doctor clean" : "Doctor needs attention",
+      title: summaryTitle,
+      summary: formatDoctorSummary(payload).replace(/^Doctor summary/u, summaryTitle),
+      completeMessage: payload.ok ? cleanMessage : attentionMessage,
       env,
+      clackUi,
     });
   } else {
     stdout.write(`${JSON.stringify(payload)}\n`);
@@ -1644,6 +1730,7 @@ export async function runDispatcherCli({
   stdout = process.stdout,
   stderr = process.stderr,
   env = process.env,
+  clackUi = DEFAULT_CLACK_SUMMARY_UI,
   dispatchPreqRun = defaultDispatchPreqRun,
   runInstallWizard = defaultRunInstallWizard,
   runUninstallWizard = defaultRunUninstallWizard,
@@ -1720,6 +1807,32 @@ export async function runDispatcherCli({
         args,
         stdout,
         env,
+        clackUi,
+        inspectOpenClawPluginFn,
+        getHermesSkillStatusFn,
+        inspectRuntimeWorkerSupportFn,
+        inspectRuntimeExecutableHealthFn,
+        inspectRuntimeMcpServersFn,
+        resolveDefaultPreqstationServerUrlFn,
+      });
+    }
+
+    if (command === "status") {
+      const { positional } = parseOptions(args);
+      if (positional[0] === "hermes") {
+        await handlePlatformCommand({ command, args, stdout, env });
+        return 0;
+      }
+      return handleDoctorCommand({
+        args,
+        stdout,
+        env,
+        clackUi,
+        action: "status",
+        usageCommand: "status",
+        summaryTitle: "Status summary",
+        cleanMessage: "Status clean",
+        attentionMessage: "Status needs attention",
         inspectOpenClawPluginFn,
         getHermesSkillStatusFn,
         inspectRuntimeWorkerSupportFn,
@@ -1746,7 +1859,7 @@ export async function runDispatcherCli({
       });
     }
 
-    if (command === "sync" || command === "status") {
+    if (command === "sync") {
       await handlePlatformCommand({ command, args, stdout, env });
       return 0;
     }
