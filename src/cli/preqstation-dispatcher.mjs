@@ -11,6 +11,7 @@ import {
 import { dispatchPreqRun as defaultDispatchPreqRun } from "../core/dispatch-runtime.mjs";
 import { parseHermesDispatchPayload } from "../adapters/hermes/payload.mjs";
 import { runInstallWizard as defaultRunInstallWizard } from "../install-wizard.mjs";
+import { runUninstallWizard as defaultRunUninstallWizard } from "../uninstall-wizard.mjs";
 import { parseDispatchMessage } from "../parse-dispatch-message.mjs";
 import {
   fetchPreqstationProjectsFromMcp as defaultFetchPreqstationProjectsFromMcp,
@@ -26,16 +27,22 @@ import { parseAutoMappings } from "../setup-command.mjs";
 import {
   getHermesSkillStatus,
   syncHermesSkill,
+  uninstallHermesSkill,
 } from "../hermes-skill-installer.mjs";
-import { installOpenClawPlugin } from "../openclaw-installer.mjs";
+import {
+  installOpenClawPlugin,
+  uninstallOpenClawPlugin,
+} from "../openclaw-installer.mjs";
 import {
   inspectRuntimeExecutableHealth,
   installRuntimeWorkerSupport,
+  uninstallRuntimeWorkerSupport,
 } from "../runtime-skill-installer.mjs";
 import {
   buildPreqstationMcpUrl,
   inspectRuntimeMcpServers,
   resolveDefaultPreqstationServerUrl,
+  uninstallRuntimeMcpServers,
 } from "../runtime-mcp-installer.mjs";
 
 const UPDATE_HOST_TARGETS = ["openclaw", "hermes"];
@@ -83,10 +90,12 @@ const HELP_ADVANCED_COLOR = "#A78BFA";
 const HELP_SECTIONS = [
   {
     title: "Install & Update",
-    commands: [`${CLI_COMMAND_NAME} install`, `${CLI_COMMAND_NAME} update`],
+    commands: [`${CLI_COMMAND_NAME} install`, `${CLI_COMMAND_NAME} uninstall`, `${CLI_COMMAND_NAME} update`],
     advanced: [
       `${CLI_COMMAND_NAME} install openclaw`,
       `${CLI_COMMAND_NAME} install hermes`,
+      `${CLI_COMMAND_NAME} uninstall openclaw`,
+      `${CLI_COMMAND_NAME} uninstall hermes`,
       `${CLI_COMMAND_NAME} sync hermes`,
       `${CLI_COMMAND_NAME} status hermes`,
     ],
@@ -378,7 +387,9 @@ function describeInstallResultLabel(result) {
     result.action === "mcp_installed" ||
     result.action === "mcp_already_configured" ||
     result.action === "mcp_configured" ||
-    result.action === "mcp_missing"
+    result.action === "mcp_missing" ||
+    result.action === "mcp_removed" ||
+    result.action === "mcp_not_configured"
   ) {
     return `${describeRuntimeTarget(result.target)} MCP`;
   }
@@ -408,6 +419,15 @@ function describeInstallResultAction(result) {
   }
   if (result.action === "mcp_missing") {
     return "not configured";
+  }
+  if (result.action === "mcp_removed") {
+    return "removed";
+  }
+  if (result.action === "mcp_not_configured") {
+    return "not configured";
+  }
+  if (result.action === "removed") {
+    return "removed";
   }
   if (result.action === "not_installed") {
     return "not installed";
@@ -541,7 +561,7 @@ function paintSummaryTone(text, tone, enabled) {
 
 function colorizeSummaryStatuses(text, enabled) {
   return text.replace(
-    /\b(current|ready|installed|registered|updated|configured|attention|failed|unavailable|not enabled|not installed)\b/g,
+    /\b(current|ready|installed|registered|updated|configured|removed|attention|failed|unavailable|not enabled|not installed|not configured)\b/g,
     (match) => {
       if (match === "failed") {
         return paintSummaryTone(match, SUMMARY_ANSI.red, enabled);
@@ -550,7 +570,8 @@ function colorizeSummaryStatuses(text, enabled) {
         match === "attention" ||
         match === "unavailable" ||
         match === "not enabled" ||
-        match === "not installed"
+        match === "not installed" ||
+        match === "not configured"
       ) {
         return paintSummaryTone(match, SUMMARY_ANSI.yellow, enabled);
       }
@@ -600,7 +621,9 @@ function partitionSummaryRows(entries = []) {
       entry.action === "mcp_installed" ||
       entry.action === "mcp_already_configured" ||
       entry.action === "mcp_configured" ||
-      entry.action === "mcp_missing";
+      entry.action === "mcp_missing" ||
+      entry.action === "mcp_removed" ||
+      entry.action === "mcp_not_configured";
     const row = {
       label: describeInstallResultLabel(entry),
       status: describeInstallResultAction(entry),
@@ -645,8 +668,45 @@ function formatInteractiveInstallSummary(result) {
         ...mcp,
       ],
     ),
+    formatProjectSetupSection(result.project_setup),
   ];
   return joinSummarySections("Install summary", sections);
+}
+
+function formatProjectSetupSection(projectSetup) {
+  if (!projectSetup) {
+    return null;
+  }
+
+  if (projectSetup.ok === false) {
+    return formatSummarySection("Project Setup", [
+      {
+        label: "setup auto",
+        status: "failed",
+        details: projectSetup.error || "",
+      },
+    ]);
+  }
+
+  const matchedCount = Object.keys(projectSetup.matched ?? {}).length;
+  const unmatchedCount = (projectSetup.unmatched ?? []).length;
+  const details = [
+    `${matchedCount} matched`,
+    ...(unmatchedCount > 0 ? [`${unmatchedCount} unmatched`] : []),
+  ].join(", ");
+
+  return formatSummarySection("Project Setup", [
+    {
+      label: "PREQ projects",
+      status: "configured",
+      details,
+    },
+    {
+      label: "Mapping file",
+      status: "ready",
+      details: projectSetup.mapping_file,
+    },
+  ]);
 }
 
 function formatInteractiveUpdateSummary(result) {
@@ -666,6 +726,23 @@ function formatInteractiveUpdateSummary(result) {
     formatSummarySection("MCP", mcp),
   ];
   return joinSummarySections("Update summary", sections);
+}
+
+function formatInteractiveUninstallSummary(result) {
+  const { hosts, support, mcp } = partitionSummaryRows(result.results ?? []);
+  const sections = [
+    formatSummarySection("Request entrypoints", hosts),
+    formatSummarySection("Agent runtimes", support),
+    formatSummarySection("MCP", mcp),
+    formatSummarySection("Settings", [
+      {
+        label: "Project mappings",
+        status: "kept",
+        details: result.projects_file || "",
+      },
+    ]),
+  ];
+  return joinSummarySections("Uninstall summary", sections);
 }
 
 function summaryBody(summary, title) {
@@ -770,6 +847,114 @@ async function runSafeUpdateTarget(target, callback) {
   }
 }
 
+async function performSetupAuto({
+  env,
+  stderr,
+  entries: initialEntries = [],
+  invalid: initialInvalid = [],
+  serverUrl = null,
+  fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
+  resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
+}) {
+  const mappingPath = getProjectsFile(env);
+  let entries = initialEntries;
+  let invalid = initialInvalid;
+  let projectSource = "arguments";
+
+  if (entries.length === 0) {
+    const resolvedServerUrl =
+      serverUrl ||
+      (await resolveDefaultPreqstationServerUrlFn({
+        env,
+      }));
+    if (!resolvedServerUrl) {
+      throw new Error(
+        `Usage: ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project, or run ${CLI_COMMAND_NAME} install to configure PREQ MCP first`,
+      );
+    }
+
+    entries = await fetchPreqstationProjectsFn({
+      serverUrl: resolvedServerUrl,
+      oauthPath: path.join(getDispatchHome(env), "oauth.json"),
+      env,
+      onLoginUrl: (url) => {
+        stderr?.write?.(`Open PREQSTATION login in your browser: ${url}\n`);
+      },
+    });
+    invalid = [];
+    projectSource = "preqstation_mcp";
+
+    if (entries.length === 0) {
+      throw new Error("No PREQ projects with repo URLs were returned by PREQSTATION MCP");
+    }
+  }
+
+  const mappings = await readProjectMappings(mappingPath);
+  const discovered = await matchProjectsToRepoRoots(entries, getRepoRoots(env));
+  const nextProjects = {
+    ...mappings.projects,
+    ...discovered.matched,
+  };
+
+  if (Object.keys(discovered.matched).length > 0) {
+    await writeProjectMappings({ mappingPath, projects: nextProjects });
+  }
+
+  return {
+    ok: true,
+    mapping_file: mappingPath,
+    matched: discovered.matched,
+    unmatched: discovered.unmatched,
+    invalid,
+    projects: nextProjects,
+    repo_roots: discovered.repoRoots,
+    ...(projectSource === "preqstation_mcp" ? { project_source: projectSource } : {}),
+  };
+}
+
+async function runInstallSetupAuto({
+  installResult,
+  env,
+  stderr,
+  fetchPreqstationProjectsFn,
+  resolveDefaultPreqstationServerUrlFn,
+}) {
+  if (installResult?.ok === false) {
+    return null;
+  }
+
+  try {
+    return await performSetupAuto({
+      env,
+      stderr,
+      entries: [],
+      invalid: [],
+      serverUrl: installResult?.preqstation_server_url || null,
+      fetchPreqstationProjectsFn,
+      resolveDefaultPreqstationServerUrlFn,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      target: "setup-auto",
+      action: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function mergeInstallSetupAutoResult(installResult, setupAutoResult) {
+  if (!setupAutoResult) {
+    return installResult;
+  }
+
+  return {
+    ...installResult,
+    ok: installResult?.ok !== false && setupAutoResult.ok !== false,
+    project_setup: setupAutoResult,
+  };
+}
+
 async function handleSetup({
   args,
   stdout,
@@ -794,60 +979,17 @@ async function handleSetup({
 
   if (action === "auto") {
     const { options, positional } = parseOptions(args.slice(1));
-    let { entries, invalid } = parseAutoMappings(positional.join(" "));
-    let projectSource = "arguments";
-
-    if (entries.length === 0) {
-      const serverUrl =
-        options["server-url"] ||
-        (await resolveDefaultPreqstationServerUrlFn({
-          env,
-        }));
-      if (!serverUrl) {
-        throw new Error(
-          `Usage: ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project, or run ${CLI_COMMAND_NAME} install to configure PREQ MCP first`,
-        );
-      }
-
-      entries = await fetchPreqstationProjectsFn({
-        serverUrl,
-        oauthPath: path.join(getDispatchHome(env), "oauth.json"),
-        env,
-        onLoginUrl: (url) => {
-          stderr?.write?.(`Open PREQSTATION login in your browser: ${url}\n`);
-        },
-      });
-      invalid = [];
-      projectSource = "preqstation_mcp";
-
-      if (entries.length === 0) {
-        throw new Error("No PREQ projects with repo URLs were returned by PREQSTATION MCP");
-      }
-    }
-
-    const mappings = await readProjectMappings(mappingPath);
-    const discovered = await matchProjectsToRepoRoots(entries, getRepoRoots(env));
-    const nextProjects = {
-      ...mappings.projects,
-      ...discovered.matched,
-    };
-
-    if (Object.keys(discovered.matched).length > 0) {
-      await writeProjectMappings({ mappingPath, projects: nextProjects });
-    }
-
-    stdout.write(
-      `${JSON.stringify({
-        ok: true,
-        mapping_file: mappingPath,
-        matched: discovered.matched,
-        unmatched: discovered.unmatched,
-        invalid,
-        projects: nextProjects,
-        repo_roots: discovered.repoRoots,
-        ...(projectSource === "preqstation_mcp" ? { project_source: projectSource } : {}),
-      })}\n`,
-    );
+    const { entries, invalid } = parseAutoMappings(positional.join(" "));
+    const result = await performSetupAuto({
+      env,
+      stderr,
+      entries,
+      invalid,
+      serverUrl: options["server-url"] || null,
+      fetchPreqstationProjectsFn,
+      resolveDefaultPreqstationServerUrlFn,
+    });
+    stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
 
@@ -864,8 +1006,11 @@ async function handleInstallCommand({
   args,
   stdin,
   stdout,
+  stderr,
   env,
   runInstallWizard = defaultRunInstallWizard,
+  fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
+  resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
 }) {
   const { options, positional } = parseOptions(args);
   const [target] = positional;
@@ -877,18 +1022,26 @@ async function handleInstallCommand({
       env,
       force: options.force === "true",
     });
+    const setupAutoResult = await runInstallSetupAuto({
+      installResult: result,
+      env,
+      stderr,
+      fetchPreqstationProjectsFn,
+      resolveDefaultPreqstationServerUrlFn,
+    });
+    const installResult = mergeInstallSetupAutoResult(result, setupAutoResult);
     if (stdout?.isTTY && result?.interactive && options.json !== "true") {
       renderInteractiveSummary({
         stdout,
         title: "Install summary",
-        summary: formatInteractiveInstallSummary(result),
-        completeMessage: result?.ok === false ? "Install needs attention" : "Install complete",
+        summary: formatInteractiveInstallSummary(installResult),
+        completeMessage: installResult?.ok === false ? "Install needs attention" : "Install complete",
         env,
       });
-      return result?.ok === false ? 1 : 0;
+      return installResult?.ok === false ? 1 : 0;
     }
-    stdout.write(`${JSON.stringify(result)}\n`);
-    return result?.ok === false ? 1 : 0;
+    stdout.write(`${JSON.stringify(installResult)}\n`);
+    return installResult?.ok === false ? 1 : 0;
   }
 
   if (target === "hermes") {
@@ -907,6 +1060,82 @@ async function handleInstallCommand({
   }
 
   throw new Error(`Usage: ${CLI_COMMAND_NAME} install [hermes|openclaw]`);
+}
+
+async function handleUninstallCommand({
+  args,
+  stdin,
+  stdout,
+  stderr,
+  env,
+  runUninstallWizard = defaultRunUninstallWizard,
+  uninstallHermesSkillFn = uninstallHermesSkill,
+  uninstallOpenClawPluginFn = uninstallOpenClawPlugin,
+  uninstallRuntimeWorkerSupportFn = uninstallRuntimeWorkerSupport,
+  uninstallRuntimeMcpServersFn = uninstallRuntimeMcpServers,
+}) {
+  const { options, positional } = parseOptions(args);
+  const [target] = positional;
+  const force = options.force === "true";
+
+  if (!target) {
+    const result = await runUninstallWizard({
+      inputStream: stdin,
+      outputStream: stdout,
+      env,
+      force,
+      uninstallHermesSkillFn,
+      uninstallOpenClawPluginFn,
+      uninstallRuntimeWorkerSupportFn,
+      uninstallRuntimeMcpServersFn,
+    });
+    const uninstallResult = {
+      ...result,
+      projects_file: getProjectsFile(env),
+    };
+    if (stdout?.isTTY && result?.interactive && options.json !== "true") {
+      renderInteractiveSummary({
+        stdout,
+        title: "Uninstall summary",
+        summary: formatInteractiveUninstallSummary(uninstallResult),
+        completeMessage: uninstallResult?.ok === false ? "Uninstall needs attention" : "Uninstall complete",
+        env,
+      });
+      return uninstallResult?.ok === false ? 1 : 0;
+    }
+    stdout.write(`${JSON.stringify(uninstallResult)}\n`);
+    return uninstallResult?.ok === false ? 1 : 0;
+  }
+
+  if (target === "hermes") {
+    const result = await uninstallHermesSkillFn({ env, force });
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return result?.ok === false ? 1 : 0;
+  }
+
+  if (target === "openclaw") {
+    const result = await uninstallOpenClawPluginFn({ env });
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return result?.ok === false ? 1 : 0;
+  }
+
+  if (["claude-code", "codex", "gemini-cli"].includes(target)) {
+    const results = [
+      ...(await uninstallRuntimeMcpServersFn({ env, runtimes: [target] })),
+      ...(await uninstallRuntimeWorkerSupportFn({ env, runtimes: [target] })),
+    ];
+    const result = {
+      ok: results.every((entry) => entry?.ok !== false),
+      action: "uninstalled",
+      runtime_engines: [target],
+      projects_file: getProjectsFile(env),
+      results,
+    };
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return result?.ok === false ? 1 : 0;
+  }
+
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} uninstall [hermes|openclaw|claude-code|codex|gemini-cli]`);
 }
 
 async function handleUpdateCommand({
@@ -1065,12 +1294,17 @@ export async function runDispatcherCli({
   env = process.env,
   dispatchPreqRun = defaultDispatchPreqRun,
   runInstallWizard = defaultRunInstallWizard,
+  runUninstallWizard = defaultRunUninstallWizard,
   getHermesSkillStatusFn = getHermesSkillStatus,
   syncHermesSkillFn = syncHermesSkill,
+  uninstallHermesSkillFn = uninstallHermesSkill,
   installOpenClawPluginFn = installOpenClawPlugin,
+  uninstallOpenClawPluginFn = uninstallOpenClawPlugin,
   installRuntimeWorkerSupportFn = installRuntimeWorkerSupport,
+  uninstallRuntimeWorkerSupportFn = uninstallRuntimeWorkerSupport,
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
+  uninstallRuntimeMcpServersFn = uninstallRuntimeMcpServers,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
   fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
 }) {
@@ -1100,7 +1334,31 @@ export async function runDispatcherCli({
     }
 
     if (command === "install") {
-      return handleInstallCommand({ args, stdin, stdout, env, runInstallWizard });
+      return handleInstallCommand({
+        args,
+        stdin,
+        stdout,
+        stderr,
+        env,
+        runInstallWizard,
+        fetchPreqstationProjectsFn,
+        resolveDefaultPreqstationServerUrlFn,
+      });
+    }
+
+    if (command === "uninstall") {
+      return handleUninstallCommand({
+        args,
+        stdin,
+        stdout,
+        stderr,
+        env,
+        runUninstallWizard,
+        uninstallHermesSkillFn,
+        uninstallOpenClawPluginFn,
+        uninstallRuntimeWorkerSupportFn,
+        uninstallRuntimeMcpServersFn,
+      });
     }
 
     if (command === "update") {

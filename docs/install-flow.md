@@ -394,8 +394,19 @@ Interactive install currently behaves like this:
 6. install/update selected runtime worker support
 7. verify runtime support really stuck
 8. register runtime MCP endpoints
-9. print summary
-10. exit non-zero if any post-check failed
+9. run MCP-backed `setup auto`, opening browser OAuth when needed, to map PREQ projects to local git checkouts
+10. print summary
+11. exit non-zero if any post-check failed
+
+Interactive uninstall is the matching cleanup flow:
+
+1. ask which hosts to uninstall
+2. ask which runtimes to remove
+3. remove selected OpenClaw/Hermes entrypoints
+4. remove selected runtime MCP registrations
+5. remove selected runtime worker support
+6. keep project mappings and OAuth cache data
+7. print summary
 
 ## 15. Reviewer notes
 

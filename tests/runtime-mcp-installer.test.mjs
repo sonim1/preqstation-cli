@@ -7,6 +7,7 @@ import {
   installRuntimeMcpServers,
   normalizePreqstationServerUrl,
   resolveDefaultPreqstationServerUrl,
+  uninstallRuntimeMcpServers,
 } from "../src/runtime-mcp-installer.mjs";
 
 test("normalizePreqstationServerUrl trims trailing slashes and accepts localhost http", () => {
@@ -132,6 +133,81 @@ test("installRuntimeMcpServers registers the PREQ MCP endpoint for selected runt
       },
     ],
   );
+});
+
+test("uninstallRuntimeMcpServers removes configured PREQ MCP endpoints", async () => {
+  const calls = [];
+
+  const results = await uninstallRuntimeMcpServers({
+    runtimes: ["claude-code", "codex", "gemini-cli"],
+    env: { PATH: process.env.PATH },
+    exec: async (command, args, options) => {
+      calls.push({ command, args, options });
+      if (command === "claude" && args.join(" ") === "mcp get preqstation") {
+        return { stdout: "URL: https://preq.example.com/mcp\n", stderr: "" };
+      }
+      if (command === "codex" && args.join(" ") === "mcp get preqstation") {
+        return { stdout: "url: https://preq.example.com/mcp\n", stderr: "" };
+      }
+      if (command === "gemini" && args.join(" ") === "mcp list") {
+        return { stdout: "preqstation: https://preq.example.com/mcp\n", stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    {
+      command: "claude",
+      args: ["mcp", "get", "preqstation"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+    {
+      command: "claude",
+      args: ["mcp", "remove", "-s", "user", "preqstation"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+    {
+      command: "codex",
+      args: ["mcp", "get", "preqstation"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+    {
+      command: "codex",
+      args: ["mcp", "remove", "preqstation"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+    {
+      command: "gemini",
+      args: ["mcp", "list"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+    {
+      command: "gemini",
+      args: ["mcp", "remove", "--scope", "user", "preqstation"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+  ]);
+  assert.deepEqual(results, [
+    {
+      ok: true,
+      target: "claude-code",
+      action: "mcp_removed",
+      mcp_url: "https://preq.example.com/mcp",
+    },
+    {
+      ok: true,
+      target: "codex",
+      action: "mcp_removed",
+      mcp_url: "https://preq.example.com/mcp",
+    },
+    {
+      ok: true,
+      target: "gemini-cli",
+      action: "mcp_removed",
+      mcp_url: "https://preq.example.com/mcp",
+    },
+  ]);
 });
 
 test("installRuntimeMcpServers skips runtimes that already point at the requested PREQ MCP URL", async () => {

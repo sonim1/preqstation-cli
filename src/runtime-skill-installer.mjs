@@ -314,6 +314,34 @@ async function ensureClaudePlugin({
   };
 }
 
+async function removeClaudePlugin({
+  env,
+  exec,
+}) {
+  const pluginList = await exec("claude", ["plugin", "list"], { env });
+  const pluginInstalled = isClaudePluginInstalled(pluginList?.stdout ?? "");
+  const installedVersion = parseClaudePluginVersion(pluginList?.stdout ?? "");
+
+  if (!pluginInstalled) {
+    return {
+      ok: true,
+      target: "claude-code",
+      action: "not_installed",
+      installed_version: null,
+    };
+  }
+
+  await exec("claude", ["plugin", "uninstall", "preqstation@preqstation", "--scope", "user", "-y"], {
+    env,
+  });
+  return {
+    ok: true,
+    target: "claude-code",
+    action: "removed",
+    installed_version: installedVersion,
+  };
+}
+
 async function ensureAgentSkill({
   runtime,
   env,
@@ -422,6 +450,42 @@ async function ensureAgentSkill({
   };
 }
 
+async function removeAgentSkill({
+  runtime,
+  env,
+  exec,
+  readFile,
+}) {
+  const runtimeConfig = RUNTIME_SKILL_TARGETS[runtime];
+  const state = await inspectAgentSkillState({ runtime, env, exec, readFile });
+  const skillPath = resolveAgentSkillPath(runtime, env);
+
+  if (!state.agentInstalled) {
+    return {
+      ok: true,
+      target: runtime,
+      action: state.entry?.path ? "not_enabled" : "not_installed",
+      installed_version: state.installedVersion,
+      skill_path: state.entry?.path ?? skillPath,
+      configured_agents: state.configuredAgents,
+    };
+  }
+
+  await exec(
+    "npx",
+    ["skills", "remove", PREQSTATION_SKILL_NAME, "-g", "-a", runtimeConfig.agentId, "-y"],
+    { env },
+  );
+  await fs.rm(skillPath, { recursive: true, force: true });
+  return {
+    ok: true,
+    target: runtime,
+    action: "removed",
+    installed_version: state.installedVersion,
+    skill_path: state.entry?.path ?? skillPath,
+  };
+}
+
 export async function installRuntimeWorkerSupport({
   runtimes,
   env = process.env,
@@ -455,6 +519,41 @@ export async function installRuntimeWorkerSupport({
         readFile,
         latestVersion,
         installMissing,
+      }),
+    );
+  }
+
+  return results;
+}
+
+export async function uninstallRuntimeWorkerSupport({
+  runtimes,
+  env = process.env,
+  exec = execFileAsync,
+  readFile = fs.readFile,
+} = {}) {
+  const runtimeTargets = Array.from(new Set((runtimes ?? []).filter(Boolean)));
+  const results = [];
+
+  for (const runtime of runtimeTargets) {
+    const runtimeConfig = RUNTIME_SKILL_TARGETS[runtime];
+    if (!runtimeConfig) {
+      throw new Error(
+        `Unsupported runtime target: ${runtime}. Expected one of ${SUPPORTED_RUNTIME_SKILL_TARGETS.join(", ")}`,
+      );
+    }
+
+    if (runtimeConfig.type === "plugin") {
+      results.push(await removeClaudePlugin({ env, exec }));
+      continue;
+    }
+
+    results.push(
+      await removeAgentSkill({
+        runtime,
+        env,
+        exec,
+        readFile,
       }),
     );
   }

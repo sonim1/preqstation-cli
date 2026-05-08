@@ -55,6 +55,10 @@ preqstation run --project-key PROJ --task-key PROJ-327 --objective implement --e
 
 `preqstation setup auto` fetches PREQ projects from the configured `/mcp` endpoint with OAuth, scans local git repos under `PREQSTATION_REPO_ROOTS` or `~/projects`, and saves matched local paths to `~/.preqstation-dispatch/projects.json`.
 
+Interactive `preqstation install` runs that MCP-backed setup automatically after registering runtime MCP endpoints.
+
+Interactive `preqstation uninstall` removes selected request entrypoints, runtime MCP registrations, and runtime worker support while keeping project mappings and OAuth cache data.
+
 Hermes Telegram messages should lead to `preqstation`; they should not implement the PREQ task inside the Hermes chat run.
 
 ## Hard Rules

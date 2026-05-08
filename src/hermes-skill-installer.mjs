@@ -297,6 +297,76 @@ export async function syncHermesSkill({ env = process.env, force = false } = {})
       ? { backup_file: backupFiles[0] }
       : backupFiles.length > 1
         ? { backup_files: backupFiles }
+      : {}),
+  };
+}
+
+export async function uninstallHermesSkill({ env = process.env, force = false } = {}) {
+  const paths = getSkillPaths(env);
+  const legacyPaths = getLegacySkillPaths(env);
+  const bundledContent = await fs.readFile(BUNDLED_SKILL_FILE, "utf8");
+  const bundledSha = sha256(bundledContent);
+  const legacyBundledContent = await fs.readFile(LEGACY_BUNDLED_SKILL_FILE, "utf8");
+  const legacyBundledSha = sha256(legacyBundledContent);
+  const installs = [
+    {
+      ...paths,
+      bundledSha,
+      installedContent: await readInstalledSkill(paths.skillFile),
+      metadata: await readMetadata(paths.metadataFile),
+    },
+    {
+      ...legacyPaths,
+      bundledSha: legacyBundledSha,
+      installedContent: await readInstalledSkill(legacyPaths.skillFile),
+      metadata: await readMetadata(legacyPaths.metadataFile),
+    },
+  ].filter((entry) => entry.installedContent !== null);
+
+  if (installs.length === 0) {
+    return {
+      ok: true,
+      target: TARGET,
+      action: "not_installed",
+      skill_file: paths.skillFile,
+    };
+  }
+
+  for (const install of installs) {
+    const userModified = detectUserModified({
+      installedContent: install.installedContent,
+      metadata: install.metadata,
+      bundledSha: install.bundledSha,
+    });
+    if (userModified && !force) {
+      throw new Error(
+        "Hermes skill has local changes. Run `preqstation uninstall hermes --force` to back up and remove it.",
+      );
+    }
+  }
+
+  const backupFiles = [];
+  if (force) {
+    for (const install of installs) {
+      const backupFile = `${install.skillDir}.bak-${backupSuffix()}.SKILL.md`;
+      await fs.copyFile(install.skillFile, backupFile);
+      backupFiles.push(backupFile);
+    }
+  }
+
+  for (const install of installs) {
+    await fs.rm(install.skillDir, { recursive: true, force: true });
+  }
+
+  return {
+    ok: true,
+    target: TARGET,
+    action: "removed",
+    skill_file: paths.skillFile,
+    ...(backupFiles.length === 1
+      ? { backup_file: backupFiles[0] }
+      : backupFiles.length > 1
+        ? { backup_files: backupFiles }
         : {}),
   };
 }

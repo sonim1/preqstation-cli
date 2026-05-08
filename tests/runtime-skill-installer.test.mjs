@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   inspectRuntimeExecutableHealth,
   installRuntimeWorkerSupport,
+  uninstallRuntimeWorkerSupport,
 } from "../src/runtime-skill-installer.mjs";
 
 function createFetchVersion(version) {
@@ -41,6 +42,62 @@ test("inspectRuntimeExecutableHealth reports ready when Codex resolves to a stab
       resolved_path: "/Users/kendrick/.local/bin/codex",
     },
   ]);
+});
+
+test("uninstallRuntimeWorkerSupport removes Codex skill binding", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-runtime-uninstall-"));
+  const skillPath = path.join(tempDir, ".codex", "skills", "preqstation");
+  await fs.mkdir(skillPath, { recursive: true });
+  await fs.writeFile(
+    path.join(skillPath, "package.json"),
+    JSON.stringify({ version: "0.1.45" }),
+    "utf8",
+  );
+  const calls = [];
+
+  const results = await uninstallRuntimeWorkerSupport({
+    runtimes: ["codex"],
+    env: { HOME: tempDir, PATH: process.env.PATH },
+    exec: async (command, args, options) => {
+      calls.push({ command, args, options });
+      if (args.join(" ") === "skills ls -g --json") {
+        return {
+          stdout: JSON.stringify([
+            {
+              name: "preqstation",
+              path: skillPath,
+              agents: ["Codex"],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    {
+      command: "npx",
+      args: ["skills", "ls", "-g", "--json"],
+      options: { env: { HOME: tempDir, PATH: process.env.PATH } },
+    },
+    {
+      command: "npx",
+      args: ["skills", "remove", "preqstation", "-g", "-a", "codex", "-y"],
+      options: { env: { HOME: tempDir, PATH: process.env.PATH } },
+    },
+  ]);
+  assert.deepEqual(results, [
+    {
+      ok: true,
+      target: "codex",
+      action: "removed",
+      installed_version: "0.1.45",
+      skill_path: skillPath,
+    },
+  ]);
+  await assert.rejects(fs.stat(skillPath), /ENOENT/);
 });
 
 test("inspectRuntimeExecutableHealth warns when Gemini resolves to an fnm multishell path for OpenClaw", async () => {
@@ -522,6 +579,49 @@ test("installRuntimeWorkerSupport reports Claude not_installed during update-onl
       installed_version: null,
       latest_version: "0.1.35",
       marketplace_added: false,
+    },
+  ]);
+});
+
+test("uninstallRuntimeWorkerSupport removes the Claude Code plugin", async () => {
+  const calls = [];
+  const results = await uninstallRuntimeWorkerSupport({
+    runtimes: ["claude-code"],
+    env: { PATH: process.env.PATH },
+    exec: async (command, args, options) => {
+      calls.push({ command, args, options });
+      if (command === "claude" && args.join(" ") === "plugin list") {
+        return {
+          stdout: [
+            "Installed plugins:",
+            "",
+            "  ❯ preqstation@preqstation",
+            "    Version: 0.1.45",
+            "    Scope: user",
+          ].join("\n"),
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    },
+  });
+
+  assert.deepEqual(
+    calls.map(({ command, args }) => ({ command, args })),
+    [
+      { command: "claude", args: ["plugin", "list"] },
+      {
+        command: "claude",
+        args: ["plugin", "uninstall", "preqstation@preqstation", "--scope", "user", "-y"],
+      },
+    ],
+  );
+  assert.deepEqual(results, [
+    {
+      ok: true,
+      target: "claude-code",
+      action: "removed",
+      installed_version: "0.1.45",
     },
   ]);
 });

@@ -108,6 +108,7 @@ During real dispatch, Hermes Agent receives the Telegram message and calls this 
 ```bash
 npm install -g @sonim1/preqstation
 preqstation install
+preqstation uninstall
 preqstation install hermes
 preqstation setup set PROJ /absolute/path/to/project
 preqstation setup auto
@@ -116,6 +117,8 @@ preqstation setup status
 ```
 
 `install` without a target opens an interactive wizard that can install the OpenClaw adapter, the Hermes skill, and optional PREQ worker support for Claude Code, Codex, and Gemini CLI. Automation should call `install hermes` or `install openclaw` directly.
+
+`uninstall` opens the matching removal wizard. It removes selected request entrypoints, runtime MCP registrations, and runtime worker support, but keeps `~/.preqstation-dispatch/projects.json` and OAuth cache data. Use `uninstall hermes --force` only when you want to back up and remove a locally modified Hermes skill.
 
 Hermes must have terminal/tool execution enabled. A chat-only Hermes profile cannot create worktrees or launch local worker CLIs.
 
@@ -144,6 +147,7 @@ If you choose agent runtimes during the interactive `install` wizard, the wizard
 - installs or updates the PREQ Claude plugin for Claude Code
 - installs or updates the global `preqstation` worker skill for Codex and Gemini CLI
 - registers `preqstation` over the remote `/mcp` endpoint for each selected runtime
+- runs MCP-backed `setup auto`, opening browser OAuth when needed, to map PREQ projects to local git checkouts
 
 The wizard is idempotent. Existing runtime support is reported as `already current`, older installs are updated in place, and matching MCP endpoints are reported as `already configured`.
 

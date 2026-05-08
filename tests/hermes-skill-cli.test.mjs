@@ -5,6 +5,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { runDispatcherCli } from "../src/cli/preqstation-dispatcher.mjs";
+import {
+  syncHermesSkill,
+  uninstallHermesSkill,
+} from "../src/hermes-skill-installer.mjs";
 
 function stripAnsi(value) {
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
@@ -64,7 +68,61 @@ test("install hermes copies the bundled PREQ dispatch skill with provenance", as
   assert.equal(result.metadata_file, metadataFile);
 });
 
+test("uninstallHermesSkill removes the managed Hermes skill", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-hermes-uninstall-"));
+  const hermesHome = path.join(tempDir, ".hermes");
+  const env = { PREQSTATION_HERMES_HOME: hermesHome };
+  const skillFile = path.join(
+    hermesHome,
+    "skills",
+    "preqstation",
+    "preqstation_dispatch",
+    "SKILL.md",
+  );
+
+  await syncHermesSkill({ env });
+  const result = await uninstallHermesSkill({ env });
+
+  assert.deepEqual(result, {
+    ok: true,
+    target: "hermes",
+    action: "removed",
+    skill_file: skillFile,
+  });
+  await assert.rejects(fs.stat(skillFile), /ENOENT/);
+});
+
+test("uninstallHermesSkill backs up locally modified skills when forced", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-hermes-uninstall-force-"));
+  const hermesHome = path.join(tempDir, ".hermes");
+  const env = { PREQSTATION_HERMES_HOME: hermesHome };
+  const skillFile = path.join(
+    hermesHome,
+    "skills",
+    "preqstation",
+    "preqstation_dispatch",
+    "SKILL.md",
+  );
+
+  await syncHermesSkill({ env });
+  await fs.appendFile(skillFile, "\nLocal operator note.\n", "utf8");
+
+  await assert.rejects(
+    uninstallHermesSkill({ env }),
+    /Hermes skill has local changes/,
+  );
+
+  const result = await uninstallHermesSkill({ env, force: true });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.action, "removed");
+  assert.match(result.backup_file, /preqstation_dispatch\.bak-\d+\.SKILL\.md$/);
+  await assert.rejects(fs.stat(skillFile), /ENOENT/);
+  assert.match(await fs.readFile(result.backup_file, "utf8"), /Local operator note/);
+});
+
 test("install runs the interactive wizard when no target is provided", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-install-cli-"));
   const stdout = [];
   let called = false;
 
@@ -72,6 +130,10 @@ test("install runs the interactive wizard when no target is provided", async () 
     argv: ["install"],
     stdout: { write: (value) => stdout.push(value) },
     stderr: { write: () => {} },
+    env: {
+      PREQSTATION_PROJECTS_FILE: path.join(tempDir, "projects.json"),
+      PREQSTATION_REPO_ROOTS: tempDir,
+    },
     runInstallWizard: async () => {
       called = true;
       return {
@@ -91,6 +153,9 @@ test("install runs the interactive wizard when no target is provided", async () 
     dispatchPreqRun: async () => {
       throw new Error("install must not dispatch");
     },
+    fetchPreqstationProjectsFn: async () => [
+      { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+    ],
   });
 
   const result = JSON.parse(stdout.join(""));
@@ -100,16 +165,22 @@ test("install runs the interactive wizard when no target is provided", async () 
   assert.deepEqual(result.install_targets, ["hermes"]);
   assert.deepEqual(result.runtime_engines, ["codex"]);
   assert.equal(result.mcp_url, "https://preq.example.com/mcp");
+  assert.equal(result.project_setup.project_source, "preqstation_mcp");
 });
 
 test("install renders a friendly summary for interactive tty output", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-install-summary-"));
   const stdout = [];
 
   const exitCode = await runDispatcherCli({
     argv: ["install"],
     stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 240 },
     stderr: { write: () => {} },
-    env: { FORCE_COLOR: "1" },
+    env: {
+      FORCE_COLOR: "1",
+      PREQSTATION_PROJECTS_FILE: path.join(tempDir, "projects.json"),
+      PREQSTATION_REPO_ROOTS: tempDir,
+    },
     runInstallWizard: async () => ({
       ok: true,
       action: "installed",
@@ -136,6 +207,9 @@ test("install renders a friendly summary for interactive tty output", async () =
     dispatchPreqRun: async () => {
       throw new Error("install must not dispatch");
     },
+    fetchPreqstationProjectsFn: async () => [
+      { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+    ],
   });
 
   const rendered = stdout.join("");
@@ -152,6 +226,8 @@ test("install renders a friendly summary for interactive tty output", async () =
   assert.match(plain, /MCP/);
   assert.match(plain, /Endpoint\s+https:\/\/preq\.example\.com\/mcp/);
   assert.match(plain, /Claude Code MCP\s+configured/);
+  assert.match(plain, /Project Setup/);
+  assert.match(plain, /PREQ projects\s+configured\s+0 matched, 1 unmatched/);
   assert.match(plain, /Install complete/);
   assert.match(rendered, /\u001B\[38;2;34;211;238mOpenClaw\u001B\[0m/);
   assert.match(rendered, /\u001B\[38;2;16;163;127mCodex\u001B\[0m/);

@@ -5,7 +5,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { runDispatcherCli } from "../src/cli/preqstation-dispatcher.mjs";
-import { installOpenClawPlugin } from "../src/openclaw-installer.mjs";
+import {
+  installOpenClawPlugin,
+  uninstallOpenClawPlugin,
+} from "../src/openclaw-installer.mjs";
 
 const packageJsonPath = new URL("../package.json", import.meta.url);
 
@@ -99,6 +102,46 @@ test("install openclaw runs the OpenClaw plugin install command", async () => {
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     package_version: currentPackageVersion,
+  });
+});
+
+test("uninstallOpenClawPlugin removes the OpenClaw plugin with force", async () => {
+  const calls = [];
+
+  const result = await uninstallOpenClawPlugin({
+    env: { PATH: process.env.PATH },
+    exec: async (command, args, options) => {
+      calls.push({ command, args, options });
+      if (args.join(" ") === "plugins inspect preqstation-dispatcher") {
+        return {
+          stdout: "Recorded version: 0.1.36\n",
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    {
+      command: "openclaw",
+      args: ["plugins", "inspect", "preqstation-dispatcher"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+    {
+      command: "openclaw",
+      args: ["plugins", "uninstall", "preqstation-dispatcher", "--force"],
+      options: { env: { PATH: process.env.PATH } },
+    },
+  ]);
+  assert.deepEqual(result, {
+    ok: true,
+    target: "openclaw",
+    action: "removed",
+    package: "@sonim1/preqstation",
+    plugin_id: "preqstation-dispatcher",
+    restart_command: "openclaw gateway restart",
+    installed_version: "0.1.36",
   });
 });
 

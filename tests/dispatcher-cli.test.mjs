@@ -58,8 +58,10 @@ test("prints grouped help with the public preqstation command name", async () =>
   assert.match(help, /Direct Dispatch \(run without OpenClaw\/Hermes\)/);
   assert.match(help, /Info/);
   assert.match(help, /Advanced:/);
+  assert.match(help, /preqstation uninstall\s*$/m);
   assert.match(help, /preqstation setup auto\s*$/m);
   assert.match(help, /preqstation install hermes/);
+  assert.match(help, /preqstation uninstall openclaw/);
   assert.match(help, /preqstation sync hermes/);
   assert.match(help, /preqstation run --project-key PROJ/);
   assert.doesNotMatch(help, /^Usage:/m);
@@ -286,6 +288,150 @@ test("setup auto fetches PREQ projects when repo hints are omitted", async () =>
     },
     repo_roots: [repoRoot],
     project_source: "preqstation_mcp",
+  });
+});
+
+test("install runs setup auto from PREQ projects after the wizard completes", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-install-auto-"));
+  const mappingPath = path.join(tempDir, "projects.json");
+  const repoRoot = path.join(tempDir, "repos");
+  const projectPath = path.join(repoRoot, "projects-manager");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@github.com:sonim1/projects-manager.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
+
+  const stdout = [];
+  const projectFetches = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["install"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      PREQSTATION_PROJECTS_FILE: mappingPath,
+      PREQSTATION_REPO_ROOTS: repoRoot,
+    },
+    runInstallWizard: async () => ({
+      ok: true,
+      action: "installed",
+      interactive: false,
+      install_targets: ["openclaw"],
+      runtime_engines: ["codex"],
+      preqstation_server_url: "https://preq.example.com",
+      mcp_url: "https://preq.example.com/mcp",
+      results: [],
+    }),
+    fetchPreqstationProjectsFn: async (options) => {
+      projectFetches.push(options);
+      return [
+        { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+        { projectKey: "MISS", repoUrl: "https://github.com/sonim1/missing-repo" },
+      ];
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(projectFetches.length, 1);
+  assert.equal(projectFetches[0].serverUrl, "https://preq.example.com");
+  assert.deepEqual(JSON.parse(await fs.readFile(mappingPath, "utf8")), {
+    projects: {
+      PROJ: projectPath,
+    },
+  });
+  const result = JSON.parse(stdout.join(""));
+  assert.deepEqual(result.project_setup.matched, {
+    PROJ: projectPath,
+  });
+  assert.deepEqual(result.project_setup.unmatched, [
+    {
+      projectKey: "MISS",
+      repoUrl: "https://github.com/sonim1/missing-repo",
+    },
+  ]);
+  assert.equal(result.project_setup.project_source, "preqstation_mcp");
+});
+
+test("uninstall runs the interactive wizard when no target is provided", async () => {
+  const stdout = [];
+  let called = false;
+
+  const exitCode = await runDispatcherCli({
+    argv: ["uninstall"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: { PREQSTATION_PROJECTS_FILE: "/tmp/preqstation-projects.json" },
+    runUninstallWizard: async () => {
+      called = true;
+      return {
+        ok: true,
+        action: "uninstalled",
+        interactive: true,
+        uninstall_targets: ["openclaw"],
+        runtime_engines: ["codex"],
+        results: [
+          { ok: true, target: "openclaw", action: "removed" },
+          { ok: true, target: "codex", action: "mcp_removed" },
+          { ok: true, target: "codex", action: "removed" },
+        ],
+      };
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("uninstall must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(called, true);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    action: "uninstalled",
+    interactive: true,
+    uninstall_targets: ["openclaw"],
+    runtime_engines: ["codex"],
+    projects_file: "/tmp/preqstation-projects.json",
+    results: [
+      { ok: true, target: "openclaw", action: "removed" },
+      { ok: true, target: "codex", action: "mcp_removed" },
+      { ok: true, target: "codex", action: "removed" },
+    ],
+  });
+});
+
+test("uninstall openclaw runs the OpenClaw remover", async () => {
+  const stdout = [];
+  const calls = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["uninstall", "openclaw"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: { PATH: process.env.PATH },
+    uninstallOpenClawPluginFn: async ({ env }) => {
+      calls.push(env);
+      return {
+        ok: true,
+        target: "openclaw",
+        action: "removed",
+        plugin_id: "preqstation-dispatcher",
+        restart_command: "openclaw gateway restart",
+      };
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("uninstall must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls, [{ PATH: process.env.PATH }]);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    target: "openclaw",
+    action: "removed",
+    plugin_id: "preqstation-dispatcher",
+    restart_command: "openclaw gateway restart",
   });
 });
 

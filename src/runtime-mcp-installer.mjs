@@ -27,6 +27,7 @@ const RUNTIME_MCP_INSTALLERS = {
       PREQSTATION_MCP_NAME,
       mcpUrl,
     ],
+    removeArgs: () => ["mcp", "remove", "-s", "user", PREQSTATION_MCP_NAME],
     inspectArgs: () => ["mcp", "get", PREQSTATION_MCP_NAME],
     parseExistingConfig(stdout) {
       const match = String(stdout || "").match(/URL:\s+(\S+)/u);
@@ -52,6 +53,7 @@ const RUNTIME_MCP_INSTALLERS = {
   codex: {
     command: "codex",
     args: (mcpUrl) => ["mcp", "add", PREQSTATION_MCP_NAME, "--url", mcpUrl],
+    removeArgs: () => ["mcp", "remove", PREQSTATION_MCP_NAME],
     inspectArgs: () => ["mcp", "get", PREQSTATION_MCP_NAME],
     statusInspectArgs: () => ["mcp", "list"],
     parseExistingConfig(stdout) {
@@ -97,6 +99,7 @@ const RUNTIME_MCP_INSTALLERS = {
       PREQSTATION_MCP_NAME,
       mcpUrl,
     ],
+    removeArgs: () => ["mcp", "remove", "--scope", "user", PREQSTATION_MCP_NAME],
     inspectArgs: () => ["mcp", "list"],
     parseExistingConfig(stdout) {
       const parsed = parseGeminiMcpStatus(stdout);
@@ -412,6 +415,49 @@ export async function installRuntimeMcpServers({
       mcp_url: mcpUrl,
       command: installer.command,
       args,
+    });
+  }
+
+  return results;
+}
+
+export async function uninstallRuntimeMcpServers({
+  runtimes = SUPPORTED_RUNTIME_TARGETS,
+  env = process.env,
+  exec = execFileAsync,
+} = {}) {
+  const runtimeTargets = Array.from(new Set((runtimes ?? []).filter(Boolean)));
+  const results = [];
+
+  for (const runtime of runtimeTargets) {
+    const installer = RUNTIME_MCP_INSTALLERS[runtime];
+    if (!installer) {
+      throw new Error(
+        `Unsupported runtime target: ${runtime}. Expected one of ${SUPPORTED_RUNTIME_TARGETS.join(", ")}`,
+      );
+    }
+
+    const existingConfig = await inspectRuntimeMcpServer({
+      installer,
+      env,
+      exec,
+    });
+    if (!existingConfig.exists) {
+      results.push({
+        ok: true,
+        target: runtime,
+        action: "mcp_not_configured",
+        mcp_url: null,
+      });
+      continue;
+    }
+
+    await exec(installer.command, installer.removeArgs(), { env });
+    results.push({
+      ok: true,
+      target: runtime,
+      action: "mcp_removed",
+      mcp_url: existingConfig.url ?? null,
     });
   }
 

@@ -15,7 +15,7 @@ function isPluginNotInstalledError(error) {
       : error instanceof Error
         ? error.message
         : String(error);
-  return /not found|no plugin|unknown plugin/i.test(message);
+  return /not found|not installed|no plugin|unknown plugin/i.test(message);
 }
 
 async function readPackageVersion() {
@@ -193,4 +193,37 @@ export async function installOpenClawPlugin({
   } catch (error) {
     throw error;
   }
+}
+
+export async function uninstallOpenClawPlugin({
+  env = process.env,
+  exec = execFileAsync,
+} = {}) {
+  let installedVersion = null;
+  try {
+    installedVersion = await inspectInstalledPluginVersion({ env, exec });
+  } catch (error) {
+    if (isPluginNotInstalledError(error)) {
+      return {
+        ok: true,
+        target: "openclaw",
+        action: "not_installed",
+        package: PACKAGE_NAME,
+        plugin_id: PLUGIN_ID,
+        restart_command: "openclaw gateway restart",
+      };
+    }
+    throw error;
+  }
+
+  await exec("openclaw", ["plugins", "uninstall", PLUGIN_ID, "--force"], { env });
+  return {
+    ok: true,
+    target: "openclaw",
+    action: "removed",
+    package: PACKAGE_NAME,
+    plugin_id: PLUGIN_ID,
+    restart_command: "openclaw gateway restart",
+    ...(installedVersion ? { installed_version: installedVersion } : {}),
+  };
 }
