@@ -61,6 +61,8 @@ const SUMMARY_SECTION_THEMES = {
   "Request entrypoints": "#22D3EE",
   "Agent runtimes": "#10A37F",
   MCP: "#4796E3",
+  "Matched Projects": "#10A37F",
+  "Unmatched Projects": "#F59E0B",
   "Install & Update": "#10A37F",
   "Project Setup": "#22D3EE",
   "Direct Dispatch (run without OpenClaw/Hermes)": "#D97757",
@@ -561,13 +563,14 @@ function paintSummaryTone(text, tone, enabled) {
 
 function colorizeSummaryStatuses(text, enabled) {
   return text.replace(
-    /\b(current|ready|installed|registered|updated|configured|removed|attention|failed|unavailable|not enabled|not installed|not configured)\b/g,
+    /\b(current|ready|installed|registered|updated|configured|mapped|removed|attention|failed|unmatched|unavailable|not enabled|not installed|not configured)\b/g,
     (match) => {
       if (match === "failed") {
         return paintSummaryTone(match, SUMMARY_ANSI.red, enabled);
       }
       if (
         match === "attention" ||
+        match === "unmatched" ||
         match === "unavailable" ||
         match === "not enabled" ||
         match === "not installed" ||
@@ -668,45 +671,71 @@ function formatInteractiveInstallSummary(result) {
         ...mcp,
       ],
     ),
-    formatProjectSetupSection(result.project_setup),
+    ...formatProjectSetupSections(result.project_setup),
   ];
   return joinSummarySections("Install summary", sections);
 }
 
-function formatProjectSetupSection(projectSetup) {
+function formatProjectSetupSections(projectSetup) {
   if (!projectSetup) {
-    return null;
+    return [];
   }
 
   if (projectSetup.ok === false) {
-    return formatSummarySection("Project Setup", [
-      {
-        label: "setup auto",
-        status: "failed",
-        details: projectSetup.error || "",
-      },
-    ]);
+    return [
+      formatSummarySection("Project Setup", [
+        {
+          label: "setup auto",
+          status: "failed",
+          details: projectSetup.error || "",
+        },
+      ]),
+    ];
   }
 
-  const matchedCount = Object.keys(projectSetup.matched ?? {}).length;
+  const matchedEntries = Object.entries(projectSetup.matched ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
   const unmatchedCount = (projectSetup.unmatched ?? []).length;
   const details = [
-    `${matchedCount} matched`,
+    `${matchedEntries.length} matched`,
     ...(unmatchedCount > 0 ? [`${unmatchedCount} unmatched`] : []),
   ].join(", ");
 
-  return formatSummarySection("Project Setup", [
-    {
-      label: "PREQ projects",
-      status: "configured",
-      details,
-    },
-    {
-      label: "Mapping file",
-      status: "ready",
-      details: projectSetup.mapping_file,
-    },
-  ]);
+  return [
+    formatSummarySection("Project Setup", [
+      {
+        label: "PREQ projects",
+        status: "configured",
+        details,
+      },
+      {
+        label: "Mapping file",
+        status: "ready",
+        details: projectSetup.mapping_file,
+      },
+    ]),
+    formatSummarySection(
+      "Matched Projects",
+      matchedEntries.map(([projectKey, projectPath]) => ({
+        label: projectKey,
+        status: "mapped",
+        details: projectPath,
+      })),
+    ),
+    formatSummarySection(
+      "Unmatched Projects",
+      (projectSetup.unmatched ?? []).map((project) => ({
+        label: project.projectKey || "UNKNOWN",
+        status: "unmatched",
+        details: project.repoUrl || "",
+      })),
+    ),
+  ];
+}
+
+function formatInteractiveProjectSetupSummary(projectSetup) {
+  return joinSummarySections("Project setup", formatProjectSetupSections(projectSetup));
 }
 
 function formatInteractiveUpdateSummary(result) {
@@ -724,6 +753,7 @@ function formatInteractiveUpdateSummary(result) {
     formatSummarySection("Request entrypoints", hosts),
     formatSummarySection("Agent runtimes", support),
     formatSummarySection("MCP", mcp),
+    ...formatProjectSetupSections(result.project_setup),
   ];
   return joinSummarySections("Update summary", sections);
 }
@@ -923,13 +953,29 @@ async function runInstallSetupAuto({
     return null;
   }
 
+  return runMcpBackedSetupAuto({
+    env,
+    stderr,
+    serverUrl: installResult?.preqstation_server_url || null,
+    fetchPreqstationProjectsFn,
+    resolveDefaultPreqstationServerUrlFn,
+  });
+}
+
+async function runMcpBackedSetupAuto({
+  env,
+  stderr,
+  serverUrl,
+  fetchPreqstationProjectsFn,
+  resolveDefaultPreqstationServerUrlFn,
+}) {
   try {
     return await performSetupAuto({
       env,
       stderr,
       entries: [],
       invalid: [],
-      serverUrl: installResult?.preqstation_server_url || null,
+      serverUrl,
       fetchPreqstationProjectsFn,
       resolveDefaultPreqstationServerUrlFn,
     });
@@ -989,6 +1035,16 @@ async function handleSetup({
       fetchPreqstationProjectsFn,
       resolveDefaultPreqstationServerUrlFn,
     });
+    if (stdout?.isTTY && options.json !== "true") {
+      renderInteractiveSummary({
+        stdout,
+        title: "Project setup",
+        summary: formatInteractiveProjectSetupSummary(result),
+        completeMessage: result?.ok === false ? "Setup needs attention" : "Setup complete",
+        env,
+      });
+      return;
+    }
     stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
@@ -1141,6 +1197,7 @@ async function handleUninstallCommand({
 async function handleUpdateCommand({
   args,
   stdout,
+  stderr,
   env,
   getHermesSkillStatusFn = getHermesSkillStatus,
   syncHermesSkillFn = syncHermesSkill,
@@ -1149,6 +1206,7 @@ async function handleUpdateCommand({
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
+  fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
 }) {
   const { options, positional } = parseOptions(args);
   if (positional.length > 0) {
@@ -1223,15 +1281,23 @@ async function handleUpdateCommand({
     runtimes: UPDATE_RUNTIME_TARGETS,
     env,
   }).catch(() => null);
+  const setupAutoResult = await runMcpBackedSetupAuto({
+    env,
+    stderr,
+    serverUrl,
+    fetchPreqstationProjectsFn,
+    resolveDefaultPreqstationServerUrlFn,
+  });
 
   const payload = {
-    ok: results.every((entry) => entry?.ok !== false),
+    ok: results.every((entry) => entry?.ok !== false) && setupAutoResult?.ok !== false,
     action: "updated",
     interactive: true,
     host_targets: UPDATE_HOST_TARGETS,
     runtime_engines: UPDATE_RUNTIME_TARGETS,
     server_url: serverUrl,
     mcp_url: serverUrl ? buildPreqstationMcpUrl(serverUrl) : null,
+    project_setup: setupAutoResult,
     results,
   };
 
@@ -1365,6 +1431,7 @@ export async function runDispatcherCli({
       return handleUpdateCommand({
         args,
         stdout,
+        stderr,
         env,
         getHermesSkillStatusFn,
         syncHermesSkillFn,
@@ -1373,6 +1440,7 @@ export async function runDispatcherCli({
         inspectRuntimeExecutableHealthFn,
         inspectRuntimeMcpServersFn,
         resolveDefaultPreqstationServerUrlFn,
+        fetchPreqstationProjectsFn,
       });
     }
 

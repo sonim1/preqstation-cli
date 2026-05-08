@@ -142,6 +142,8 @@ preqstation status hermes
 
 If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
 
+`preqstation update` refreshes installed request entrypoints and installed runtime support without installing missing targets. It also runs MCP-backed `setup auto` so project mappings stay in sync with PREQSTATION after updates.
+
 If you choose agent runtimes during the interactive `install` wizard, the wizard prompts for the current PREQSTATION server URL and then:
 
 - installs or updates the PREQ Claude plugin for Claude Code

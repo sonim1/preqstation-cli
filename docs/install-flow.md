@@ -398,6 +398,14 @@ Interactive install currently behaves like this:
 10. print summary
 11. exit non-zero if any post-check failed
 
+`preqstation update` follows the same summary shape without prompting:
+
+1. refresh installed OpenClaw/Hermes entrypoints
+2. update installed runtime worker support without installing missing targets
+3. inspect runtime CLI and MCP health
+4. run MCP-backed `setup auto`
+5. print the grouped update summary, including `Project Setup`
+
 Interactive uninstall is the matching cleanup flow:
 
 1. ask which hosts to uninstall

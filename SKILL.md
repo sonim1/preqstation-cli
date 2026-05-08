@@ -57,6 +57,8 @@ preqstation run --project-key PROJ --task-key PROJ-327 --objective implement --e
 
 Interactive `preqstation install` runs that MCP-backed setup automatically after registering runtime MCP endpoints.
 
+`preqstation update` refreshes installed entrypoints/runtime support and then runs the same MCP-backed project setup.
+
 Interactive `preqstation uninstall` removes selected request entrypoints, runtime MCP registrations, and runtime worker support while keeping project mappings and OAuth cache data.
 
 Hermes Telegram messages should lead to `preqstation`; they should not implement the PREQ task inside the Hermes chat run.

@@ -14,6 +14,14 @@ async function readCurrentPackageVersion() {
   return pkg.version;
 }
 
+function stripAnsi(value) {
+  return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 test("prints the package version for --version", async () => {
   const stdout = [];
 
@@ -289,6 +297,52 @@ test("setup auto fetches PREQ projects when repo hints are omitted", async () =>
     repo_roots: [repoRoot],
     project_source: "preqstation_mcp",
   });
+});
+
+test("setup auto renders saved and unmatched projects for interactive tty output", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-mcp-auto-tty-"));
+  const mappingPath = path.join(tempDir, "projects.json");
+  const repoRoot = path.join(tempDir, "repos");
+  const projectPath = path.join(repoRoot, "projects-manager");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@github.com:sonim1/projects-manager.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["setup", "auto"],
+    stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 160 },
+    stderr: { write: () => {} },
+    env: {
+      FORCE_COLOR: "1",
+      PREQSTATION_PROJECTS_FILE: mappingPath,
+      PREQSTATION_REPO_ROOTS: repoRoot,
+      PREQSTATION_SERVER_URL: "https://preq.example.com",
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("setup must not dispatch");
+    },
+    fetchPreqstationProjectsFn: async () => [
+      { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+      { projectKey: "MISS", repoUrl: "https://github.com/sonim1/missing-repo" },
+    ],
+  });
+
+  const rendered = stdout.join("");
+  const plain = stripAnsi(rendered);
+  assert.equal(exitCode, 0);
+  assert.match(plain, /Project Setup/);
+  assert.match(plain, /PREQ projects\s+configured\s+1 matched, 1 unmatched/);
+  assert.match(plain, /Matched Projects/);
+  assert.match(plain, new RegExp(`PROJ\\s+mapped\\s+${escapeRegExp(projectPath)}`));
+  assert.match(plain, /Unmatched Projects/);
+  assert.match(plain, /MISS\s+unmatched\s+https:\/\/github\.com\/sonim1\/missing-repo/);
+  assert.match(plain, /Setup complete/);
+  assert.doesNotMatch(plain, /^\{/m);
 });
 
 test("install runs setup auto from PREQ projects after the wizard completes", async () => {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +13,10 @@ import {
 
 function stripAnsi(value) {
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function readJson(filePath) {
@@ -407,6 +412,7 @@ test("status hermes reports whether the installed skill is current", async () =>
 });
 
 test("update refreshes installed surfaces without installing missing ones", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-update-refresh-"));
   const stdout = [];
   const runtimeCalls = [];
   const runtimeExecutableCalls = [];
@@ -415,6 +421,10 @@ test("update refreshes installed surfaces without installing missing ones", asyn
     argv: ["update"],
     stdout: { write: (value) => stdout.push(value) },
     stderr: { write: () => {} },
+    env: {
+      PREQSTATION_PROJECTS_FILE: path.join(tempDir, "projects.json"),
+      PREQSTATION_REPO_ROOTS: tempDir,
+    },
     getHermesSkillStatusFn: async () => ({
       ok: true,
       target: "hermes",
@@ -525,6 +535,9 @@ test("update refreshes installed surfaces without installing missing ones", asyn
       ];
     },
     resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    fetchPreqstationProjectsFn: async () => [
+      { projectKey: "MISS", repoUrl: "https://github.com/sonim1/missing-repo" },
+    ],
     dispatchPreqRun: async () => {
       throw new Error("update must not dispatch");
     },
@@ -563,16 +576,109 @@ test("update refreshes installed surfaces without installing missing ones", asyn
   );
   assert.equal(result.server_url, "https://preq.example.com");
   assert.equal(result.mcp_url, "https://preq.example.com/mcp");
+  assert.equal(result.project_setup.project_source, "preqstation_mcp");
+});
+
+test("update runs setup auto from PREQ projects after refreshing installed surfaces", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-update-auto-"));
+  const mappingPath = path.join(tempDir, "projects.json");
+  const repoRoot = path.join(tempDir, "repos");
+  const projectPath = path.join(repoRoot, "projects-manager");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@github.com:sonim1/projects-manager.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
+
+  const stdout = [];
+  const projectFetches = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["update"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      PREQSTATION_PROJECTS_FILE: mappingPath,
+      PREQSTATION_REPO_ROOTS: repoRoot,
+    },
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: false,
+      skill_file: "/tmp/hermes/SKILL.md",
+      metadata_file: "/tmp/hermes/.preqstation-dispatcher.json",
+    }),
+    installOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "not_installed",
+    }),
+    installRuntimeWorkerSupportFn: async ({ runtimes }) => [
+      { ok: true, target: runtimes[0], action: "not_installed" },
+    ],
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) => [
+      { ok: true, target: runtimes[0], category: "runtime_executable", action: "unavailable" },
+    ],
+    inspectRuntimeMcpServersFn: async ({ runtimes }) => [
+      { ok: true, target: runtimes[0], action: "mcp_missing", mcp_url: null },
+    ],
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    fetchPreqstationProjectsFn: async (options) => {
+      projectFetches.push(options);
+      return [
+        { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+        { projectKey: "MISS", repoUrl: "https://github.com/sonim1/missing-repo" },
+      ];
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("update must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(projectFetches.length, 1);
+  assert.equal(projectFetches[0].serverUrl, "https://preq.example.com");
+  assert.deepEqual(JSON.parse(await fs.readFile(mappingPath, "utf8")), {
+    projects: {
+      PROJ: projectPath,
+    },
+  });
+  const result = JSON.parse(stdout.join(""));
+  assert.deepEqual(result.project_setup.matched, {
+    PROJ: projectPath,
+  });
+  assert.deepEqual(result.project_setup.unmatched, [
+    {
+      projectKey: "MISS",
+      repoUrl: "https://github.com/sonim1/missing-repo",
+    },
+  ]);
+  assert.equal(result.project_setup.project_source, "preqstation_mcp");
 });
 
 test("update renders a friendly summary for interactive tty output", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-update-summary-"));
+  const repoRoot = path.join(tempDir, "repos");
+  const projectPath = path.join(repoRoot, "projects-manager");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@github.com:sonim1/projects-manager.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
   const stdout = [];
 
   const exitCode = await runDispatcherCli({
     argv: ["update"],
     stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 240 },
     stderr: { write: () => {} },
-    env: { FORCE_COLOR: "1" },
+    env: {
+      FORCE_COLOR: "1",
+      PREQSTATION_PROJECTS_FILE: path.join(tempDir, "projects.json"),
+      PREQSTATION_REPO_ROOTS: repoRoot,
+    },
     getHermesSkillStatusFn: async () => ({
       ok: true,
       target: "hermes",
@@ -690,6 +796,10 @@ test("update renders a friendly summary for interactive tty output", async () =>
       ];
     },
     resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    fetchPreqstationProjectsFn: async () => [
+      { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+      { projectKey: "MISS", repoUrl: "https://github.com/sonim1/missing-repo" },
+    ],
     dispatchPreqRun: async () => {
       throw new Error("update must not dispatch");
     },
@@ -720,6 +830,12 @@ test("update renders a friendly summary for interactive tty output", async () =>
   assert.match(plain, /Claude Code MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
   assert.match(plain, /Codex MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: enabled, auth: OAuth/);
   assert.match(plain, /Gemini CLI MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Disconnected/);
+  assert.match(plain, /Project Setup/);
+  assert.match(plain, /PREQ projects\s+configured\s+1 matched, 1 unmatched/);
+  assert.match(plain, /Matched Projects/);
+  assert.match(plain, new RegExp(`PROJ\\s+mapped\\s+${escapeRegExp(projectPath)}`));
+  assert.match(plain, /Unmatched Projects/);
+  assert.match(plain, /MISS\s+unmatched\s+https:\/\/github\.com\/sonim1\/missing-repo/);
   assert.match(rendered, /\u001B\[38;2;217;119;87mClaude Code\u001B\[0m/);
   assert.match(rendered, /\u001B\[38;2;71;150;227mGemini CLI\u001B\[0m/);
   assert.match(rendered, /\u001B\[33mattention\u001B\[0m/);
