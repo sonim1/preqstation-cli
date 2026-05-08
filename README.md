@@ -110,6 +110,7 @@ npm install -g @sonim1/preqstation
 preqstation install
 preqstation install hermes
 preqstation setup set PROJ /absolute/path/to/project
+preqstation setup auto
 preqstation setup auto PROJ=https://github.com/example/project
 preqstation setup status
 ```
@@ -138,7 +139,7 @@ preqstation status hermes
 
 If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
 
-If you choose worker runtimes during the interactive `install` wizard, the wizard prompts for the current PREQSTATION server URL and then:
+If you choose agent runtimes during the interactive `install` wizard, the wizard prompts for the current PREQSTATION server URL and then:
 
 - installs or updates the PREQ Claude plugin for Claude Code
 - installs or updates the global `preqstation` worker skill for Codex and Gemini CLI
@@ -146,7 +147,9 @@ If you choose worker runtimes during the interactive `install` wizard, the wizar
 
 The wizard is idempotent. Existing runtime support is reported as `already current`, older installs are updated in place, and matching MCP endpoints are reported as `already configured`.
 
-`setup auto` scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`, matches local git `origin` URLs against the provided repo URLs, and stores successful matches in `~/.preqstation-dispatch/projects.json`.
+`setup auto` without repo hints fetches PREQ projects from the configured remote `/mcp` endpoint with OAuth, then scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`. It matches local git `origin` URLs against PREQ project repo URLs and stores successful matches in `~/.preqstation-dispatch/projects.json`.
+
+`setup auto PROJ=https://github.com/example/project` keeps the previous explicit-hint behavior and skips fetching the project list from PREQSTATION.
 
 Run a dispatch directly:
 
@@ -186,6 +189,8 @@ Environment variables:
 - `PREQSTATION_GEMINI_HOME`: optional Gemini-specific worker home override
 - `PREQSTATION_MEMORY_PATH`: optional legacy markdown mapping fallback
 - `PREQSTATION_REPO_ROOTS`: optional path-delimited roots for `setup auto`
+- `PREQSTATION_SERVER_URL` or `PREQSTATION_API_URL`: optional PREQSTATION server URL for `install`, `update`, and MCP-backed `setup auto`
+- `PREQSTATION_TOKEN`: optional bearer token override for MCP-backed `setup auto`; otherwise `~/.preqstation-dispatch/oauth.json` is reused or created through browser OAuth
 
 Detached worker launches never inherit a Hermes profile home by accident. When no worker-home override is set, the dispatcher falls back to the owning user's real home so worker MCP auth can stay separate from Telegram-host profile state.
 

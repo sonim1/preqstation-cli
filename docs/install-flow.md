@@ -25,8 +25,8 @@ preqstation install
 ```
 
 This enters the install wizard and asks the user to select:
-- dispatcher hosts
-- worker runtimes
+- request entrypoints
+- agent runtimes
 - PREQSTATION server URL
 
 ### Direct host install
@@ -42,11 +42,11 @@ These bypass the wizard and install only the selected host.
 
 The wizard prompts for:
 
-### Dispatcher hosts
+### Request entrypoints
 - `OpenClaw`
 - `Hermes Agent`
 
-### Worker runtimes
+### Agent runtimes
 - `Claude Code`
 - `Codex`
 - `Gemini CLI`
@@ -85,11 +85,11 @@ The derived MCP endpoint is:
 During interactive install the wizard prints sections in this order:
 
 1. `PREQ MCP endpoint`
-2. `Dispatcher hosts`
-3. `Worker runtimes`
+2. `Request entrypoints`
+3. `Agent runtimes`
 4. final `Install summary`
 
-## 5. Dispatcher host installation
+## 5. Request entrypoint installation
 
 Each selected host is processed in sequence.
 
@@ -292,13 +292,13 @@ Examples:
 
 ## 10. Final summary generation
 
-The final summary is partitioned into:
+The final summary is partitioned into separate Clack boxes:
 
-### Hosts
+### Request entrypoints
 - OpenClaw
 - Hermes Agent
 
-### Worker Support
+### Agent runtimes
 - Claude Code
 - Codex
 - Gemini CLI

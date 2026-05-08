@@ -1,10 +1,20 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import {
+  box as clackBox,
+  log as clackLog,
+  note as clackNote,
+  outro as clackOutro,
+} from "@clack/prompts";
+
 import { dispatchPreqRun as defaultDispatchPreqRun } from "../core/dispatch-runtime.mjs";
 import { parseHermesDispatchPayload } from "../adapters/hermes/payload.mjs";
 import { runInstallWizard as defaultRunInstallWizard } from "../install-wizard.mjs";
 import { parseDispatchMessage } from "../parse-dispatch-message.mjs";
+import {
+  fetchPreqstationProjectsFromMcp as defaultFetchPreqstationProjectsFromMcp,
+} from "../preqstation-mcp-client.mjs";
 import {
   getDefaultRepoRoots,
   getDefaultSharedMappingPath,
@@ -32,6 +42,77 @@ const UPDATE_HOST_TARGETS = ["openclaw", "hermes"];
 const UPDATE_RUNTIME_TARGETS = ["claude-code", "codex", "gemini-cli"];
 const PACKAGE_JSON_FILE = new URL("../../package.json", import.meta.url);
 const CLI_COMMAND_NAME = "preqstation";
+const DEFAULT_CLACK_SUMMARY_UI = {
+  box: clackBox,
+  log: clackLog,
+  note: clackNote,
+  outro: clackOutro,
+};
+
+const SUMMARY_SECTION_THEMES = {
+  Settings: "#9EA1AA",
+  "Request entrypoints": "#22D3EE",
+  "Agent runtimes": "#10A37F",
+  MCP: "#4796E3",
+  "Install & Update": "#10A37F",
+  "Project Setup": "#22D3EE",
+  "Direct Dispatch (run without OpenClaw/Hermes)": "#D97757",
+  Info: "#9EA1AA",
+};
+
+const SUMMARY_SERVICE_THEMES = [
+  ["Hermes Agent", "#F37021"],
+  ["Claude Code", "#D97757"],
+  ["Gemini CLI", "#4796E3"],
+  ["OpenClaw", "#22D3EE"],
+  ["Codex", "#10A37F"],
+];
+
+const SUMMARY_ANSI = {
+  reset: "\u001B[0m",
+  green: "\u001B[32m",
+  red: "\u001B[31m",
+  yellow: "\u001B[33m",
+};
+const HELP_DESCRIPTION =
+  "Local dispatcher for PREQSTATION requests across OpenClaw, Hermes Agent, and direct Codex/Claude/Gemini runs.";
+const HELP_COMMAND_COLOR = "#10A37F";
+const HELP_FLAG_COLOR = "#4796E3";
+const HELP_VALUE_COLOR = "#F59E0B";
+const HELP_ADVANCED_COLOR = "#A78BFA";
+const HELP_SECTIONS = [
+  {
+    title: "Install & Update",
+    commands: [`${CLI_COMMAND_NAME} install`, `${CLI_COMMAND_NAME} update`],
+    advanced: [
+      `${CLI_COMMAND_NAME} install openclaw`,
+      `${CLI_COMMAND_NAME} install hermes`,
+      `${CLI_COMMAND_NAME} sync hermes`,
+      `${CLI_COMMAND_NAME} status hermes`,
+    ],
+  },
+  {
+    title: "Project Setup",
+    commands: [`${CLI_COMMAND_NAME} setup auto`],
+    advanced: [
+      `${CLI_COMMAND_NAME} setup set PROJ /absolute/path/to/project`,
+      `${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project`,
+      `${CLI_COMMAND_NAME} setup status`,
+    ],
+  },
+  {
+    title: "Direct Dispatch (run without OpenClaw/Hermes)",
+    commands: [
+      `${CLI_COMMAND_NAME} run --project-key PROJ --task-key PROJ-123 --objective implement --engine codex`,
+      `${CLI_COMMAND_NAME} run-message --message 'preqstation implement PROJ-123 using codex'`,
+      `${CLI_COMMAND_NAME} run-json --payload /path/to/payload.json`,
+    ],
+  },
+  {
+    title: "Info",
+    commands: [`${CLI_COMMAND_NAME} help`, `${CLI_COMMAND_NAME} --version`],
+  },
+];
 
 function getDispatchHome(env) {
   return (
@@ -101,9 +182,15 @@ async function readJsonFile(filePath) {
   return JSON.parse(await fs.readFile(filePath, "utf8"));
 }
 
-async function readPackageVersion() {
+async function readPackageMetadata() {
   const pkg = JSON.parse(await fs.readFile(PACKAGE_JSON_FILE, "utf8"));
-  return String(pkg?.version || "").trim();
+  return {
+    version: String(pkg?.version || "").trim(),
+  };
+}
+
+async function readPackageVersion() {
+  return (await readPackageMetadata()).version;
 }
 
 async function readProjectMappings(mappingPath) {
@@ -185,26 +272,74 @@ async function parseDispatchFromCommand(command, args) {
   throw new Error(`Unsupported command: ${command}`);
 }
 
-function printUsage(stdout) {
-  stdout.write(
-    [
-      "Usage:",
-      `  ${CLI_COMMAND_NAME} run --project-key PROJ --task-key PROJ-123 --objective implement --engine codex [--branch-name BRANCH] [--comment-id COMMENT_ID]`,
-      `  ${CLI_COMMAND_NAME} run-json --payload /path/to/payload.json`,
-      `  ${CLI_COMMAND_NAME} run-message --message 'preqstation implement PROJ-123 using codex'`,
-      `  ${CLI_COMMAND_NAME} setup set PROJ /absolute/path/to/project`,
-      `  ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project`,
-      `  ${CLI_COMMAND_NAME} setup status`,
-      `  ${CLI_COMMAND_NAME} install [hermes|openclaw] [--json]`,
-      `  ${CLI_COMMAND_NAME} install`,
-      `  ${CLI_COMMAND_NAME} update [--force] [--json]`,
-      `  ${CLI_COMMAND_NAME} sync hermes [--force]`,
-      `  ${CLI_COMMAND_NAME} status hermes`,
-      `  ${CLI_COMMAND_NAME} --version`,
-      `  ${CLI_COMMAND_NAME} -v`,
+function colorizeHelpCommand(command, enabled) {
+  if (!enabled) {
+    return command;
+  }
+
+  return command
+    .replaceAll(CLI_COMMAND_NAME, paintSummaryHex(CLI_COMMAND_NAME, HELP_COMMAND_COLOR, enabled))
+    .replace(/\B--[a-z-]+/g, (match) => paintSummaryHex(match, HELP_FLAG_COLOR, enabled))
+    .replace(
+      /\b(PROJ-\d+|PROJ|BRANCH|COMMENT_ID)\b/g,
+      (match) => paintSummaryHex(match, HELP_VALUE_COLOR, enabled),
+    )
+    .replace(
+      /\/(?:absolute\/path\/to\/project|path\/to\/payload\.json)/g,
+      (match) => paintSummaryHex(match, HELP_VALUE_COLOR, enabled),
+    );
+}
+
+function formatHelpSection(section, { color = false } = {}) {
+  const lines = section.commands.map((command) => `  ${colorizeHelpCommand(command, color)}`);
+  if (section.advanced?.length) {
+    lines.push(
       "",
-    ].join("\n"),
-  );
+      `  ${paintSummaryHex("Advanced:", HELP_ADVANCED_COLOR, color)}`,
+      ...section.advanced.map((command) => `  ${colorizeHelpCommand(command, color)}`),
+    );
+  }
+  return lines.join("\n");
+}
+
+function formatHelpText({ version }) {
+  return [
+    `PREQSTATION`,
+    HELP_DESCRIPTION,
+    `Version ${version}`,
+    "",
+    ...HELP_SECTIONS.flatMap((section) => [
+      section.title,
+      formatHelpSection(section),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderHelpBoxes({ stdout, version, env = process.env, clackUi = DEFAULT_CLACK_SUMMARY_UI }) {
+  if (!stdout?.isTTY || typeof clackUi.box !== "function" || typeof clackUi.note !== "function") {
+    return false;
+  }
+
+  clackUi.note(`${HELP_DESCRIPTION}\nVersion ${version}`, "PREQSTATION", { output: stdout });
+  const color = supportsSummaryColor({ outputStream: stdout, env });
+  for (const section of HELP_SECTIONS) {
+    const sectionColor = SUMMARY_SECTION_THEMES[section.title] ?? "#9EA1AA";
+    clackUi.box(formatHelpSection(section, { color }), section.title, {
+      output: stdout,
+      width: "auto",
+      rounded: true,
+      formatBorder: (text) => paintSummaryHex(text, sectionColor, color),
+    });
+  }
+  return true;
+}
+
+function printUsage({ stdout, version, env }) {
+  if (renderHelpBoxes({ stdout, version, env })) {
+    return;
+  }
+  stdout.write(`${formatHelpText({ version })}\n`);
 }
 
 function describeInstallTarget(target) {
@@ -230,9 +365,14 @@ function describeRuntimeTarget(target) {
   return target;
 }
 
+function describeRuntimeCliTarget(target) {
+  const label = describeRuntimeTarget(target);
+  return label.endsWith("CLI") ? label : `${label} CLI`;
+}
+
 function describeInstallResultLabel(result) {
   if (result.category === "runtime_executable") {
-    return `${describeRuntimeTarget(result.target)} CLI`;
+    return describeRuntimeCliTarget(result.target);
   }
   if (
     result.action === "mcp_installed" ||
@@ -361,6 +501,77 @@ function padSummaryCell(value, width) {
   return String(value || "").padEnd(width, " ");
 }
 
+function supportsSummaryColor({ outputStream, env = process.env }) {
+  if (!outputStream?.isTTY) {
+    return false;
+  }
+  if (env.NO_COLOR) {
+    return false;
+  }
+  if (env.FORCE_COLOR === "0") {
+    return false;
+  }
+  return true;
+}
+
+function parseHexColor(hex) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!match) {
+    return null;
+  }
+  const value = match[1];
+  return {
+    red: Number.parseInt(value.slice(0, 2), 16),
+    green: Number.parseInt(value.slice(2, 4), 16),
+    blue: Number.parseInt(value.slice(4, 6), 16),
+  };
+}
+
+function paintSummaryHex(text, hex, enabled) {
+  const color = parseHexColor(hex);
+  if (!enabled || !color) {
+    return text;
+  }
+  return `\u001B[38;2;${color.red};${color.green};${color.blue}m${text}${SUMMARY_ANSI.reset}`;
+}
+
+function paintSummaryTone(text, tone, enabled) {
+  return enabled ? `${tone}${text}${SUMMARY_ANSI.reset}` : text;
+}
+
+function colorizeSummaryStatuses(text, enabled) {
+  return text.replace(
+    /\b(current|ready|installed|registered|updated|configured|attention|failed|unavailable|not enabled|not installed)\b/g,
+    (match) => {
+      if (match === "failed") {
+        return paintSummaryTone(match, SUMMARY_ANSI.red, enabled);
+      }
+      if (
+        match === "attention" ||
+        match === "unavailable" ||
+        match === "not enabled" ||
+        match === "not installed"
+      ) {
+        return paintSummaryTone(match, SUMMARY_ANSI.yellow, enabled);
+      }
+      return paintSummaryTone(match, SUMMARY_ANSI.green, enabled);
+    },
+  );
+}
+
+function colorizeSummaryServices(text, enabled) {
+  return SUMMARY_SERVICE_THEMES.reduce(
+    (nextText, [label, color]) =>
+      nextText.replaceAll(label, paintSummaryHex(label, color, enabled)),
+    text,
+  );
+}
+
+function colorizeSummaryText(text, { outputStream, env }) {
+  const color = supportsSummaryColor({ outputStream, env });
+  return colorizeSummaryServices(colorizeSummaryStatuses(text, color), color);
+}
+
 function formatSummarySection(title, rows) {
   if (!rows.length) {
     return null;
@@ -417,8 +628,8 @@ function joinSummarySections(title, sections) {
 function formatInteractiveInstallSummary(result) {
   const { hosts, support, mcp } = partitionSummaryRows(result.results ?? []);
   const sections = [
-    formatSummarySection("Hosts", hosts),
-    formatSummarySection("Worker Support", support),
+    formatSummarySection("Request entrypoints", hosts),
+    formatSummarySection("Agent runtimes", support),
     formatSummarySection(
       "MCP",
       [
@@ -450,11 +661,79 @@ function formatInteractiveUpdateSummary(result) {
         ...(result.mcp_url ? [{ label: "MCP endpoint", status: result.mcp_url, details: "" }] : []),
       ],
     ),
-    formatSummarySection("Hosts", hosts),
-    formatSummarySection("Worker Support", support),
+    formatSummarySection("Request entrypoints", hosts),
+    formatSummarySection("Agent runtimes", support),
     formatSummarySection("MCP", mcp),
   ];
   return joinSummarySections("Update summary", sections);
+}
+
+function summaryBody(summary, title) {
+  const trimmed = summary.trimEnd();
+  const prefix = `${title}\n\n`;
+  if (trimmed.startsWith(prefix)) {
+    return trimmed.slice(prefix.length);
+  }
+  return trimmed;
+}
+
+function parseSummarySections(summary) {
+  return summary
+    .trimEnd()
+    .split(/\n{2,}/)
+    .map((block) => {
+      const [sectionTitle, ...lines] = block.split("\n");
+      return {
+        title: sectionTitle,
+        body: lines.join("\n"),
+      };
+    })
+    .filter((section) => section.title && section.body);
+}
+
+function renderInteractiveSummaryBoxes({ stdout, title, summary, clackUi, env }) {
+  const sections = parseSummarySections(summaryBody(summary, title));
+  if (!stdout?.isTTY || typeof clackUi.box !== "function" || sections.length === 0) {
+    return false;
+  }
+
+  if (typeof clackUi.log?.step === "function") {
+    clackUi.log.step(title, { output: stdout });
+  } else {
+    stdout.write(`${title}\n`);
+  }
+
+  const color = supportsSummaryColor({ outputStream: stdout, env });
+  for (const section of sections) {
+    const sectionColor = SUMMARY_SECTION_THEMES[section.title] ?? "#9EA1AA";
+    clackUi.box(
+      colorizeSummaryText(section.body, { outputStream: stdout, env }),
+      section.title,
+      {
+        output: stdout,
+        width: 0.9,
+        rounded: true,
+        formatBorder: (text) => paintSummaryHex(text, sectionColor, color),
+      },
+    );
+  }
+  return true;
+}
+
+function renderInteractiveSummary({
+  stdout,
+  title,
+  summary,
+  completeMessage,
+  env = process.env,
+  clackUi = DEFAULT_CLACK_SUMMARY_UI,
+}) {
+  if (renderInteractiveSummaryBoxes({ stdout, title, summary, clackUi, env })) {
+    clackUi.outro(completeMessage, { output: stdout });
+    return;
+  }
+  clackUi.note(summaryBody(summary, title), title, { output: stdout });
+  clackUi.outro(completeMessage, { output: stdout });
 }
 
 function isMissingExecutableError(error) {
@@ -491,7 +770,14 @@ async function runSafeUpdateTarget(target, callback) {
   }
 }
 
-async function handleSetup({ args, stdout, env }) {
+async function handleSetup({
+  args,
+  stdout,
+  stderr,
+  env,
+  fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
+  resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
+}) {
   const [action, projectKey, projectPath] = args;
   const mappingPath = getProjectsFile(env);
 
@@ -507,11 +793,36 @@ async function handleSetup({ args, stdout, env }) {
   }
 
   if (action === "auto") {
-    const { entries, invalid } = parseAutoMappings(args.slice(1).join(" "));
+    const { options, positional } = parseOptions(args.slice(1));
+    let { entries, invalid } = parseAutoMappings(positional.join(" "));
+    let projectSource = "arguments";
+
     if (entries.length === 0) {
-      throw new Error(
-        `Usage: ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project`,
-      );
+      const serverUrl =
+        options["server-url"] ||
+        (await resolveDefaultPreqstationServerUrlFn({
+          env,
+        }));
+      if (!serverUrl) {
+        throw new Error(
+          `Usage: ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project, or run ${CLI_COMMAND_NAME} install to configure PREQ MCP first`,
+        );
+      }
+
+      entries = await fetchPreqstationProjectsFn({
+        serverUrl,
+        oauthPath: path.join(getDispatchHome(env), "oauth.json"),
+        env,
+        onLoginUrl: (url) => {
+          stderr?.write?.(`Open PREQSTATION login in your browser: ${url}\n`);
+        },
+      });
+      invalid = [];
+      projectSource = "preqstation_mcp";
+
+      if (entries.length === 0) {
+        throw new Error("No PREQ projects with repo URLs were returned by PREQSTATION MCP");
+      }
     }
 
     const mappings = await readProjectMappings(mappingPath);
@@ -534,6 +845,7 @@ async function handleSetup({ args, stdout, env }) {
         invalid,
         projects: nextProjects,
         repo_roots: discovered.repoRoots,
+        ...(projectSource === "preqstation_mcp" ? { project_source: projectSource } : {}),
       })}\n`,
     );
     return;
@@ -566,7 +878,13 @@ async function handleInstallCommand({
       force: options.force === "true",
     });
     if (stdout?.isTTY && result?.interactive && options.json !== "true") {
-      stdout.write(formatInteractiveInstallSummary(result));
+      renderInteractiveSummary({
+        stdout,
+        title: "Install summary",
+        summary: formatInteractiveInstallSummary(result),
+        completeMessage: result?.ok === false ? "Install needs attention" : "Install complete",
+        env,
+      });
       return result?.ok === false ? 1 : 0;
     }
     stdout.write(`${JSON.stringify(result)}\n`);
@@ -689,7 +1007,13 @@ async function handleUpdateCommand({
   };
 
   if (stdout?.isTTY && options.json !== "true") {
-    stdout.write(formatInteractiveUpdateSummary(payload));
+    renderInteractiveSummary({
+      stdout,
+      title: "Update summary",
+      summary: formatInteractiveUpdateSummary(payload),
+      completeMessage: payload.ok ? "Update complete" : "Update needs attention",
+      env,
+    });
   } else {
     stdout.write(`${JSON.stringify(payload)}\n`);
   }
@@ -748,12 +1072,13 @@ export async function runDispatcherCli({
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
+  fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
 }) {
   const [command, ...args] = argv;
 
   try {
     if (!command || command === "--help" || command === "help") {
-      printUsage(stdout);
+      printUsage({ stdout, version: await readPackageVersion(), env });
       return 0;
     }
 
@@ -763,7 +1088,14 @@ export async function runDispatcherCli({
     }
 
     if (command === "setup") {
-      await handleSetup({ args, stdout, env });
+      await handleSetup({
+        args,
+        stdout,
+        stderr,
+        env,
+        fetchPreqstationProjectsFn,
+        resolveDefaultPreqstationServerUrlFn,
+      });
       return 0;
     }
 

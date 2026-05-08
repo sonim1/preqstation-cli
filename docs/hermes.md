@@ -24,6 +24,7 @@ npm install -g @sonim1/preqstation
 preqstation install
 preqstation install hermes
 preqstation setup set PROJ /absolute/path/to/project
+preqstation setup auto
 preqstation setup auto PROJ=https://github.com/example/project
 preqstation setup status
 ```
@@ -42,7 +43,13 @@ preqstation status hermes
 
 If the local skill was edited, `sync hermes` stops instead of overwriting it. Run `preqstation sync hermes --force` only when you want to back up and replace the local copy.
 
-For bulk setup, put every local checkout under `~/projects` or set `PREQSTATION_REPO_ROOTS`, then pass the PREQ project keys with repo URLs:
+For bulk setup, put every local checkout under `~/projects` or set `PREQSTATION_REPO_ROOTS`, then let the CLI fetch PREQ projects from the configured `/mcp` endpoint:
+
+```bash
+preqstation setup auto
+```
+
+You can also pass explicit PREQ project keys with repo URLs to skip the remote project-list fetch:
 
 ```bash
 preqstation setup auto \

@@ -6,23 +6,23 @@ import {
   runInstallWizard,
 } from "../src/install-wizard.mjs";
 
-test("promptInstallPlan collects host and runtime selections before requesting the PREQ URL", async () => {
-  const checkboxCalls = [];
-  const inputCalls = [];
+test("promptInstallPlan collects host and runtime selections with Clack prompt options", async () => {
+  const multiselectCalls = [];
+  const textCalls = [];
 
   const plan = await promptInstallPlan({
     inputStream: { isTTY: true },
     outputStream: { write: () => {}, isTTY: true },
     env: { FORCE_COLOR: "1" },
-    checkboxPrompt: async (config, context) => {
-      checkboxCalls.push({ config, context });
-      if (checkboxCalls.length === 1) {
+    multiselectPrompt: async (config) => {
+      multiselectCalls.push(config);
+      if (multiselectCalls.length === 1) {
         return ["openclaw", "hermes"];
       }
       return ["claude-code", "codex"];
     },
-    inputPrompt: async (config, context) => {
-      inputCalls.push({ config, context });
+    textPrompt: async (config) => {
+      textCalls.push(config);
       return "https://preq.example.com/";
     },
     resolveDefaultPreqstationServerUrlFn: async () => "https://saved-preq.example.com",
@@ -34,44 +34,44 @@ test("promptInstallPlan collects host and runtime selections before requesting t
     preqstationServerUrl: "https://preq.example.com",
     mcpUrl: "https://preq.example.com/mcp",
   });
-  assert.match(checkboxCalls[0].config.message, /dispatcher hosts/i);
-  assert.match(checkboxCalls[0].config.message, /enter toggles items; Submit continues/i);
-  assert.match(checkboxCalls[1].config.message, /worker runtimes to set up/i);
-  assert.match(checkboxCalls[1].config.message, /enter toggles items; Submit continues/i);
-  assert.match(checkboxCalls[0].config.theme.style.keysHelpTip(), /\u001B\[33m\[up\/down\]/);
-  assert.match(checkboxCalls[0].config.theme.style.keysHelpTip(), /\u001B\[36m\[space\]/);
-  assert.match(checkboxCalls[0].config.theme.style.keysHelpTip(), /\u001B\[32m\[enter\]/);
-  assert.equal(
-    checkboxCalls[0].config.validate([]),
-    "Select at least one dispatcher host before continuing.",
-  );
-  assert.equal(
-    checkboxCalls[1].config.validate([]),
-    "Select at least one worker runtime before continuing.",
-  );
-  assert.equal(checkboxCalls[0].config.validate(["openclaw"]), true);
-  assert.equal(checkboxCalls[1].config.validate(["codex"]), true);
-  assert.match(inputCalls[0].config.message, /PREQSTATION server URL/i);
-  assert.equal(inputCalls[0].config.default, "https://saved-preq.example.com");
-  assert.equal(typeof checkboxCalls[0].context.output.write, "function");
-});
-
-test("promptInstallPlan leaves help text uncolored when stdout is not a TTY", async () => {
-  const checkboxCalls = [];
-
-  await promptInstallPlan({
-    outputStream: { write: () => {} },
-    checkboxPrompt: async (config) => {
-      checkboxCalls.push(config);
-      return checkboxCalls.length === 1 ? ["openclaw"] : ["codex"];
+  assert.match(multiselectCalls[0].message, /request entrypoints/i);
+  assert.equal(multiselectCalls[0].required, true);
+  assert.deepEqual(multiselectCalls[0].options, [
+    {
+      label: "OpenClaw",
+      value: "openclaw",
+      hint: "Install the OpenClaw plugin package",
     },
-    inputPrompt: async () => "https://preq.example.com",
-  });
-
-  assert.equal(
-    checkboxCalls[0].theme.style.keysHelpTip(),
-    "Controls:  [up/down] move  [space] toggle  [enter] toggle / submit",
-  );
+    {
+      label: "Hermes Agent",
+      value: "hermes",
+      hint: "Install the bundled Hermes preqstation_dispatch skill",
+    },
+  ]);
+  assert.match(multiselectCalls[1].message, /agent runtimes to set up/i);
+  assert.equal(multiselectCalls[1].required, true);
+  assert.deepEqual(multiselectCalls[1].options, [
+    {
+      label: "Claude Code",
+      value: "claude-code",
+      hint: "Install the PREQ Claude plugin and register the remote MCP endpoint",
+    },
+    {
+      label: "Codex",
+      value: "codex",
+      hint: "Install the PREQ worker skill and register the remote MCP endpoint",
+    },
+    {
+      label: "Gemini CLI",
+      value: "gemini-cli",
+      hint: "Install the PREQ worker skill and register the remote MCP endpoint",
+    },
+  ]);
+  assert.equal(multiselectCalls[0].input.isTTY, true);
+  assert.equal(typeof multiselectCalls[0].output.write, "function");
+  assert.match(textCalls[0].message, /PREQSTATION server URL/i);
+  assert.equal(textCalls[0].placeholder, "https://saved-preq.example.com");
+  assert.equal(textCalls[0].initialValue, "https://saved-preq.example.com");
 });
 
 test("promptInstallPlan falls back to the placeholder URL when no prior PREQ server URL is known", async () => {
@@ -79,8 +79,8 @@ test("promptInstallPlan falls back to the placeholder URL when no prior PREQ ser
 
   await promptInstallPlan({
     outputStream: { write: () => {}, isTTY: true },
-    checkboxPrompt: async (_config, _context) => ["codex"],
-    inputPrompt: async (config) => {
+    multiselectPrompt: async () => ["codex"],
+    textPrompt: async (config) => {
       inputCalls.push(config);
       return "https://preq.example.com";
     },
@@ -88,7 +88,7 @@ test("promptInstallPlan falls back to the placeholder URL when no prior PREQ ser
   });
 
   assert.equal(
-    inputCalls[0].default,
+    inputCalls[0].placeholder,
     "https://your-preqstation-domain.vercel.app",
   );
 });
@@ -96,11 +96,19 @@ test("promptInstallPlan falls back to the placeholder URL when no prior PREQ ser
 test("runInstallWizard executes selected host installs and runtime MCP setup", async () => {
   const calls = [];
   const output = [];
+  const taskGroups = [];
+  const taskLabels = [];
 
   const result = await runInstallWizard({
     env: { PATH: process.env.PATH },
     force: true,
     outputStream: { write: (value) => output.push(value) },
+    runTaskGroupFn: async ({ title, tasks }) => {
+      taskGroups.push([title, tasks.map((entry) => entry.title)]);
+      for (const entry of tasks) {
+        taskLabels.push(await entry.task(() => {}));
+      }
+    },
     promptInstallPlanFn: async () => ({
       installTargets: ["openclaw", "hermes"],
       runtimeEngines: ["codex", "gemini-cli"],
@@ -161,23 +169,371 @@ test("runInstallWizard executes selected host installs and runtime MCP setup", a
     ["runtime-cli", { PATH: process.env.PATH }, ["gemini-cli"], ["openclaw", "hermes"]],
     ["mcp", { PATH: process.env.PATH }, ["gemini-cli"], "https://preq.example.com"],
   ]);
+  assert.deepEqual(taskGroups, [
+    [
+      "Request entrypoints",
+      ["Install OpenClaw", "Install Hermes Agent"],
+    ],
+    [
+      "Agent runtimes",
+      [
+        "Install Codex worker support",
+        "Check Codex CLI",
+        "Register Codex MCP",
+        "Install Gemini CLI worker support",
+        "Check Gemini CLI",
+        "Register Gemini CLI MCP",
+      ],
+    ],
+  ]);
+  assert.deepEqual(taskLabels, [
+    "OpenClaw is installed",
+    "Hermes Agent is installed",
+    "Codex skill is installed",
+    "Codex CLI is ready",
+    "Codex MCP is registered https://preq.example.com/mcp",
+    "Gemini CLI skill is installed",
+    "Gemini CLI needs attention",
+    "Gemini CLI MCP is registered https://preq.example.com/mcp",
+  ]);
   assert.deepEqual(result.install_targets, ["openclaw", "hermes"]);
   assert.deepEqual(result.runtime_engines, ["codex", "gemini-cli"]);
   assert.equal(result.mcp_url, "https://preq.example.com/mcp");
   assert.equal(result.results.length, 8);
   assert.match(output.join(""), /PREQ MCP endpoint/);
   assert.match(output.join(""), /https:\/\/preq\.example\.com\/mcp/);
-  assert.match(output.join(""), /Dispatcher hosts/);
+  assert.match(output.join(""), /Request entrypoints/);
   assert.match(output.join(""), /OpenClaw\s+installed/);
   assert.match(output.join(""), /Hermes Agent\s+installed/);
-  assert.match(output.join(""), /Worker runtimes/);
+  assert.match(output.join(""), /Agent runtimes/);
   assert.match(output.join(""), /Codex skill\s+installed/);
   assert.match(output.join(""), /Codex CLI\s+ready/);
   assert.match(output.join(""), /Codex MCP\s+registered/);
   assert.match(output.join(""), /Gemini CLI skill\s+installed/);
-  assert.match(output.join(""), /Gemini CLI CLI\s+attention/);
+  assert.match(output.join(""), /Gemini CLI\s+attention/);
   assert.match(output.join(""), /OpenClaw dispatches may not inherit/);
   assert.match(output.join(""), /Gemini CLI MCP\s+registered/);
+});
+
+test("runInstallWizard renders a Clack install surface for TTY output", async () => {
+  const outputStream = { write: () => {}, isTTY: true };
+  const uiEvents = [];
+  const taskLogEvents = [];
+  const spinnerEvents = [];
+  const boxEvents = [];
+
+  const result = await runInstallWizard({
+    env: { PATH: process.env.PATH, NO_COLOR: "1" },
+    outputStream,
+    clackUi: {
+      intro: (title, options) => uiEvents.push(["intro", title, options.output === outputStream]),
+      note: (message, title, options) =>
+        uiEvents.push(["note", title, message, options.output === outputStream]),
+      tasks: async (tasks, options) => {
+        uiEvents.push(["tasks", tasks.map(({ title }) => title), options.output === outputStream]);
+        for (const entry of tasks) {
+          await entry.task(() => {});
+        }
+      },
+      taskLog: (options) => {
+        taskLogEvents.push(["start", options.title, options.output === outputStream]);
+        return {
+          message: (message) => taskLogEvents.push(["message", message]),
+          success: (message, options = {}) =>
+            taskLogEvents.push(["success", message, options.showLog === true]),
+        };
+      },
+      spinner: (options) => {
+        spinnerEvents.push(["create", options.output === outputStream]);
+        return {
+          start: (message) => spinnerEvents.push(["start", message]),
+          stop: (message) => spinnerEvents.push(["stop", message]),
+          error: (message) => spinnerEvents.push(["error", message]),
+        };
+      },
+      box: (message, title, options) =>
+        boxEvents.push([
+          title,
+          message,
+          options.output === outputStream,
+          options.width,
+          options.rounded,
+          options.formatBorder("x"),
+        ]),
+    },
+    promptInstallPlanFn: async () => ({
+      installTargets: ["openclaw", "hermes"],
+      runtimeEngines: ["codex"],
+      preqstationServerUrl: "https://preq.example.com",
+      mcpUrl: "https://preq.example.com/mcp",
+    }),
+    installOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "installed",
+    }),
+    syncHermesSkillFn: async () => ({
+      ok: true,
+      target: "hermes",
+      action: "already_current",
+    }),
+    installRuntimeWorkerSupportFn: async () => [
+      {
+        ok: true,
+        target: "codex",
+        action: "installed",
+      },
+    ],
+    inspectRuntimeExecutableHealthFn: async () => [
+      {
+        ok: true,
+        target: "codex",
+        category: "runtime_executable",
+        action: "ready",
+      },
+    ],
+    installRuntimeMcpServersFn: async () => [
+      {
+        ok: true,
+        target: "codex",
+        action: "mcp_installed",
+      },
+    ],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(uiEvents[0], ["intro", "PREQSTATION install", true]);
+  assert.equal(uiEvents[1][0], "note");
+  assert.equal(uiEvents[1][1], "Install plan");
+  assert.match(uiEvents[1][2], /OpenClaw, Hermes Agent/);
+  assert.match(uiEvents[1][2], /Codex/);
+  assert.match(uiEvents[1][2], /https:\/\/preq\.example\.com\/mcp/);
+  assert.match(uiEvents[1][2], /Request entrypoints/);
+  assert.match(uiEvents[1][2], /Agent runtimes/);
+  assert.deepEqual(taskLogEvents, [
+    ["start", "Request entrypoints", true],
+    ["success", "Request entrypoints complete", false],
+    ["start", "Agent runtimes", true],
+    ["success", "Agent runtimes complete", false],
+  ]);
+  assert.deepEqual(spinnerEvents, [
+    ["create", true],
+    ["start", "Install OpenClaw"],
+    ["stop", "OpenClaw is installed"],
+    ["create", true],
+    ["start", "Install Hermes Agent"],
+    ["stop", "Hermes Agent is current"],
+    ["create", true],
+    ["start", "Install Codex worker support"],
+    ["stop", "Codex skill is installed"],
+    ["create", true],
+    ["start", "Check Codex CLI"],
+    ["stop", "Codex CLI is ready"],
+    ["create", true],
+    ["start", "Register Codex MCP"],
+    ["stop", "Codex MCP is registered https://preq.example.com/mcp"],
+  ]);
+  assert.deepEqual(boxEvents, [
+    ["OpenClaw", "installed", true, "auto", true, "x"],
+    ["Hermes Agent", "current", true, "auto", true, "x"],
+    [
+      "Codex",
+      [
+        "skill installed",
+        "CLI ready",
+        "MCP registered https://preq.example.com/mcp",
+      ].join("\n"),
+      true,
+      "auto",
+      true,
+      "x",
+    ],
+  ]);
+});
+
+test("runInstallWizard themes service summary box borders", async () => {
+  const outputStream = { write: () => {}, isTTY: true };
+  const boxBorders = [];
+
+  await runInstallWizard({
+    env: { PATH: process.env.PATH, FORCE_COLOR: "1" },
+    outputStream,
+    clackUi: {
+      intro: () => {},
+      note: () => {},
+      tasks: async () => {},
+      taskLog: () => ({
+        message: () => {},
+        success: () => {},
+      }),
+      spinner: () => ({
+        start: () => {},
+        stop: () => {},
+        error: () => {},
+      }),
+      box: (_message, title, options) =>
+        boxBorders.push([title, options.formatBorder("x")]),
+    },
+    promptInstallPlanFn: async () => ({
+      installTargets: ["openclaw", "hermes"],
+      runtimeEngines: ["claude-code", "codex", "gemini-cli"],
+      preqstationServerUrl: "https://preq.example.com",
+      mcpUrl: "https://preq.example.com/mcp",
+    }),
+    installOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+      installed_version: "0.1.35",
+    }),
+    syncHermesSkillFn: async () => ({
+      ok: true,
+      target: "hermes",
+      action: "already_current",
+      version: "0.1.35",
+    }),
+    installRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "already_current",
+        installed_version: "0.1.45",
+      })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+      })),
+    installRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "mcp_already_configured",
+        mcp_url: "https://preq.example.com/mcp",
+      })),
+  });
+
+  assert.deepEqual(boxBorders, [
+    [
+      "\u001B[38;2;34;211;238mOpenClaw\u001B[0m",
+      "\u001B[38;2;34;211;238mx\u001B[0m",
+    ],
+    [
+      "\u001B[38;2;243;112;33mHermes Agent\u001B[0m",
+      "\u001B[38;2;243;112;33mx\u001B[0m",
+    ],
+    [
+      "\u001B[38;2;217;119;87mClaude Code\u001B[0m",
+      "\u001B[38;2;217;119;87mx\u001B[0m",
+    ],
+    [
+      "\u001B[38;2;16;163;127mCodex\u001B[0m",
+      "\u001B[38;2;16;163;127mx\u001B[0m",
+    ],
+    [
+      "\u001B[38;2;71;150;227mGemini CLI\u001B[0m",
+      "\u001B[38;2;71;150;227mx\u001B[0m",
+    ],
+  ]);
+});
+
+test("runInstallWizard themes install plan service names", async () => {
+  const outputStream = { write: () => {}, isTTY: true };
+  const noteMessages = [];
+
+  await runInstallWizard({
+    env: { PATH: process.env.PATH, FORCE_COLOR: "1" },
+    outputStream,
+    clackUi: {
+      intro: () => {},
+      note: (message) => noteMessages.push(message),
+      tasks: async () => {},
+    },
+    runTaskGroupFn: async ({ tasks }) => {
+      for (const entry of tasks) {
+        await entry.task(() => {});
+      }
+    },
+    promptInstallPlanFn: async () => ({
+      installTargets: ["openclaw", "hermes"],
+      runtimeEngines: ["codex", "claude-code", "gemini-cli"],
+      preqstationServerUrl: "https://preq.example.com",
+      mcpUrl: "https://preq.example.com/mcp",
+    }),
+    installOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+    }),
+    syncHermesSkillFn: async () => ({
+      ok: true,
+      target: "hermes",
+      action: "already_current",
+    }),
+    installRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "already_current",
+      })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+      })),
+    installRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        action: "mcp_already_configured",
+        mcp_url: "https://preq.example.com/mcp",
+      })),
+  });
+
+  assert.match(noteMessages[0], /\u001B\[38;2;34;211;238mOpenClaw\u001B\[0m/);
+  assert.match(noteMessages[0], /\u001B\[38;2;243;112;33mHermes Agent\u001B\[0m/);
+  assert.match(noteMessages[0], /\u001B\[38;2;16;163;127mCodex\u001B\[0m/);
+  assert.match(noteMessages[0], /\u001B\[38;2;217;119;87mClaude Code\u001B\[0m/);
+  assert.match(noteMessages[0], /\u001B\[38;2;71;150;227mGemini CLI\u001B\[0m/);
+});
+
+test("runInstallWizard colorizes TTY task log statuses when color is enabled", async () => {
+  const outputStream = { write: () => {}, isTTY: true };
+  const taskLogMessages = [];
+
+  await runInstallWizard({
+    env: { PATH: process.env.PATH, FORCE_COLOR: "1" },
+    outputStream,
+    clackUi: {
+      intro: () => {},
+      note: () => {},
+      tasks: async () => {},
+      taskLog: () => ({
+        message: (message) => taskLogMessages.push(message),
+        success: () => {},
+      }),
+    },
+    promptInstallPlanFn: async () => ({
+      installTargets: ["openclaw"],
+      runtimeEngines: [],
+      preqstationServerUrl: null,
+      mcpUrl: null,
+    }),
+    installOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+      installed_version: "0.1.35",
+    }),
+  });
+
+  assert.match(taskLogMessages[0], /\u001B\[38;2;34;211;238mOpenClaw\u001B\[0m/);
+  assert.match(taskLogMessages[0], /is /);
+  assert.match(taskLogMessages[0], /\u001B\[32mcurrent\u001B\[0m/);
 });
 
 test("runInstallWizard reports when an MCP runtime is already configured", async () => {

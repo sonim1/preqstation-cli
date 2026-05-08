@@ -40,7 +40,7 @@ test("prints the package version for -v", async () => {
   assert.equal(stdout.join(""), `${await readCurrentPackageVersion()}\n`);
 });
 
-test("prints help with the public preqstation command name", async () => {
+test("prints grouped help with the public preqstation command name", async () => {
   const stdout = [];
 
   const exitCode = await runDispatcherCli({
@@ -51,8 +51,41 @@ test("prints help with the public preqstation command name", async () => {
 
   const help = stdout.join("");
   assert.equal(exitCode, 0);
+  assert.match(help, /PREQSTATION/);
+  assert.match(help, new RegExp(`Version ${await readCurrentPackageVersion()}`));
+  assert.match(help, /Install & Update/);
+  assert.match(help, /Project Setup/);
+  assert.match(help, /Direct Dispatch \(run without OpenClaw\/Hermes\)/);
+  assert.match(help, /Info/);
+  assert.match(help, /Advanced:/);
+  assert.match(help, /preqstation setup auto\s*$/m);
+  assert.match(help, /preqstation install hermes/);
+  assert.match(help, /preqstation sync hermes/);
   assert.match(help, /preqstation run --project-key PROJ/);
+  assert.doesNotMatch(help, /^Usage:/m);
   assert.doesNotMatch(help, /preqstation-dispatcher run/);
+});
+
+test("prints colored grouped help for TTY output", async () => {
+  const stdout = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["help"],
+    stdout: {
+      write: (value) => stdout.push(value),
+      isTTY: true,
+      columns: 160,
+    },
+    stderr: { write: () => {} },
+    env: { FORCE_COLOR: "1" },
+  });
+
+  const help = stdout.join("");
+  assert.equal(exitCode, 0);
+  assert.match(help, /\u001B\[38;2;16;163;127mpreqstation\u001B\[0m/);
+  assert.match(help, /\u001B\[38;2;245;158;11mPROJ\u001B\[0m/);
+  assert.match(help, /\u001B\[38;2;167;139;250mAdvanced:\u001B\[0m/);
+  assert.match(help, /\u001B\[38;2;34;211;238m/);
 });
 
 test("run-json dispatches a Hermes payload through the shared runtime", async () => {
@@ -188,6 +221,71 @@ test("setup auto maps discovered repositories into the shared mapping file", asy
       PROJ: projectPath,
     },
     repo_roots: [repoRoot],
+  });
+});
+
+test("setup auto fetches PREQ projects when repo hints are omitted", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-mcp-auto-"));
+  const mappingPath = path.join(tempDir, "projects.json");
+  const repoRoot = path.join(tempDir, "repos");
+  const projectPath = path.join(repoRoot, "projects-manager");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@github.com:sonim1/projects-manager.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
+
+  const stdout = [];
+  const projectFetches = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["setup", "auto"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      PREQSTATION_PROJECTS_FILE: mappingPath,
+      PREQSTATION_REPO_ROOTS: repoRoot,
+      PREQSTATION_SERVER_URL: "https://preq.example.com",
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("setup must not dispatch");
+    },
+    fetchPreqstationProjectsFn: async (options) => {
+      projectFetches.push(options);
+      return [
+        { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+        { projectKey: "MISS", repoUrl: "https://github.com/sonim1/missing-repo" },
+      ];
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(projectFetches.length, 1);
+  assert.equal(projectFetches[0].serverUrl, "https://preq.example.com");
+  assert.deepEqual(JSON.parse(await fs.readFile(mappingPath, "utf8")), {
+    projects: {
+      PROJ: projectPath,
+    },
+  });
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    mapping_file: mappingPath,
+    matched: {
+      PROJ: projectPath,
+    },
+    unmatched: [
+      {
+        projectKey: "MISS",
+        repoUrl: "https://github.com/sonim1/missing-repo",
+      },
+    ],
+    invalid: [],
+    projects: {
+      PROJ: projectPath,
+    },
+    repo_roots: [repoRoot],
+    project_source: "preqstation_mcp",
   });
 });
 

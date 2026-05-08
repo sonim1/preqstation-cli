@@ -6,6 +6,10 @@ import path from "node:path";
 
 import { runDispatcherCli } from "../src/cli/preqstation-dispatcher.mjs";
 
+function stripAnsi(value) {
+  return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
 async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, "utf8"));
 }
@@ -103,8 +107,9 @@ test("install renders a friendly summary for interactive tty output", async () =
 
   const exitCode = await runDispatcherCli({
     argv: ["install"],
-    stdout: { write: (value) => stdout.push(value), isTTY: true },
+    stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 240 },
     stderr: { write: () => {} },
+    env: { FORCE_COLOR: "1" },
     runInstallWizard: async () => ({
       ok: true,
       action: "installed",
@@ -134,19 +139,24 @@ test("install renders a friendly summary for interactive tty output", async () =
   });
 
   const rendered = stdout.join("");
+  const plain = stripAnsi(rendered);
 
   assert.equal(exitCode, 0);
-  assert.match(rendered, /Install summary/);
-  assert.match(rendered, /Hosts/);
-  assert.match(rendered, /OpenClaw\s+updated\s+0\.1\.19 -> 0\.1\.20, restart: openclaw gateway restart/);
-  assert.match(rendered, /Hermes Agent\s+current\s+0\.1\.20/);
-  assert.match(rendered, /Worker Support/);
-  assert.match(rendered, /Claude Code\s+current\s+0\.1\.37/);
-  assert.match(rendered, /Codex\s+installed\s+0\.1\.37/);
-  assert.match(rendered, /MCP/);
-  assert.match(rendered, /Endpoint\s+https:\/\/preq\.example\.com\/mcp/);
-  assert.match(rendered, /Claude Code MCP\s+configured/);
-  assert.doesNotMatch(rendered, /^\{/m);
+  assert.match(plain, /Install summary/);
+  assert.match(plain, /Request entrypoints/);
+  assert.match(plain, /OpenClaw\s+updated\s+0\.1\.19 -> 0\.1\.20, restart: openclaw gateway restart/);
+  assert.match(plain, /Hermes Agent\s+current\s+0\.1\.20/);
+  assert.match(plain, /Agent runtimes/);
+  assert.match(plain, /Claude Code\s+current\s+0\.1\.37/);
+  assert.match(plain, /Codex\s+installed\s+0\.1\.37/);
+  assert.match(plain, /MCP/);
+  assert.match(plain, /Endpoint\s+https:\/\/preq\.example\.com\/mcp/);
+  assert.match(plain, /Claude Code MCP\s+configured/);
+  assert.match(plain, /Install complete/);
+  assert.match(rendered, /\u001B\[38;2;34;211;238mOpenClaw\u001B\[0m/);
+  assert.match(rendered, /\u001B\[38;2;16;163;127mCodex\u001B\[0m/);
+  assert.match(rendered, /\u001B\[32mupdated\u001B\[0m/);
+  assert.doesNotMatch(plain, /^\{/m);
 });
 
 test("install summary surfaces when the local repo is newer than the published OpenClaw plugin", async () => {
@@ -154,7 +164,7 @@ test("install summary surfaces when the local repo is newer than the published O
 
   const exitCode = await runDispatcherCli({
     argv: ["install"],
-    stdout: { write: (value) => stdout.push(value), isTTY: true },
+    stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 240 },
     stderr: { write: () => {} },
     runInstallWizard: async () => ({
       ok: true,
@@ -483,8 +493,9 @@ test("update renders a friendly summary for interactive tty output", async () =>
 
   const exitCode = await runDispatcherCli({
     argv: ["update"],
-    stdout: { write: (value) => stdout.push(value), isTTY: true },
+    stdout: { write: (value) => stdout.push(value), isTTY: true, columns: 240 },
     stderr: { write: () => {} },
+    env: { FORCE_COLOR: "1" },
     getHermesSkillStatusFn: async () => ({
       ok: true,
       target: "hermes",
@@ -608,27 +619,32 @@ test("update renders a friendly summary for interactive tty output", async () =>
   });
 
   const rendered = stdout.join("");
+  const plain = stripAnsi(rendered);
   assert.equal(exitCode, 0);
-  assert.match(rendered, /Update summary/);
-  assert.match(rendered, /Settings/);
-  assert.match(rendered, /Server URL\s+https:\/\/preq\.example\.com/);
-  assert.match(rendered, /MCP endpoint\s+https:\/\/preq\.example\.com\/mcp/);
-  assert.match(rendered, /Hosts/);
-  assert.match(rendered, /OpenClaw\s+not installed/);
-  assert.match(rendered, /Hermes Agent\s+current\s+0\.1\.22/);
-  assert.match(rendered, /Worker Support/);
-  assert.match(rendered, /Claude Code\s+unavailable\s+claude command not found/);
-  assert.match(rendered, /Claude Code CLI\s+ready\s+\/Users\/kendrick\/\.local\/bin\/claude/);
-  assert.match(rendered, /Codex\s+updated\s+0\.1\.37 -> 0\.1\.38/);
-  assert.match(rendered, /Codex CLI\s+ready\s+\/Users\/kendrick\/\.local\/bin\/codex/);
-  assert.match(rendered, /Gemini CLI\s+not enabled\s+0\.1\.38, installed globally, not enabled for Gemini CLI/);
-  assert.match(
-    rendered,
-    /Gemini CLI CLI\s+attention\s+\/Users\/kendrick\/\.local\/state\/fnm_multishells\/12345\/bin\/gemini, stable path: \/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini, OpenClaw, Hermes Agent dispatches may not inherit/,
-  );
-  assert.match(rendered, /MCP/);
-  assert.match(rendered, /Claude Code MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
-  assert.match(rendered, /Codex MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: enabled, auth: OAuth/);
-  assert.match(rendered, /Gemini CLI MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Disconnected/);
-  assert.doesNotMatch(rendered, /^\{/m);
+  assert.match(plain, /Update summary/);
+  assert.match(plain, /Update complete/);
+  assert.match(plain, /Settings/);
+  assert.match(plain, /Server URL\s+https:\/\/preq\.example\.com/);
+  assert.match(plain, /MCP endpoint\s+https:\/\/preq\.example\.com\/mcp/);
+  assert.match(plain, /Request entrypoints/);
+  assert.match(plain, /OpenClaw\s+not installed/);
+  assert.match(plain, /Hermes Agent\s+current\s+0\.1\.22/);
+  assert.match(plain, /Agent runtimes/);
+  assert.match(plain, /Claude Code\s+unavailable\s+claude command not found/);
+  assert.match(plain, /Claude Code CLI\s+ready\s+\/Users\/kendrick\/\.local\/bin\/claude/);
+  assert.match(plain, /Codex\s+updated\s+0\.1\.37 -> 0\.1\.38/);
+  assert.match(plain, /Codex CLI\s+ready\s+\/Users\/kendrick\/\.local\/bin\/codex/);
+  assert.match(plain, /Gemini CLI\s+not enabled\s+0\.1\.38, installed globally, not enabled for Gemini CLI/);
+  assert.match(plain, /Gemini CLI\s+attention/);
+  assert.match(plain, /\/Users\/kendrick\/\.local\/state\/fnm_multishells\/12345\/bin\/gemini/);
+  assert.match(plain, /stable path: \/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini/);
+  assert.match(plain, /OpenClaw, Hermes[\s\S]*Agent dispatches may not/);
+  assert.match(plain, /MCP/);
+  assert.match(plain, /Claude Code MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
+  assert.match(plain, /Codex MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: enabled, auth: OAuth/);
+  assert.match(plain, /Gemini CLI MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Disconnected/);
+  assert.match(rendered, /\u001B\[38;2;217;119;87mClaude Code\u001B\[0m/);
+  assert.match(rendered, /\u001B\[38;2;71;150;227mGemini CLI\u001B\[0m/);
+  assert.match(rendered, /\u001B\[33mattention\u001B\[0m/);
+  assert.doesNotMatch(plain, /^\{/m);
 });
