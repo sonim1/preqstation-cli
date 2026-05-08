@@ -192,9 +192,10 @@ test("install summary surfaces when the local repo is newer than the published O
   });
 
   const rendered = stdout.join("");
+  const plain = stripAnsi(rendered);
 
   assert.equal(exitCode, 0);
-  assert.match(rendered, /OpenClaw\s+current\s+0\.1\.21, restart: openclaw gateway restart, local repo: 0\.1\.24 unpublished/);
+  assert.match(plain, /OpenClaw\s+current\s+0\.1\.21, restart: openclaw gateway restart, local repo: 0\.1\.24 unpublished/);
 });
 
 test("install returns a non-zero exit code when the interactive wizard reports failed runtime setup", async () => {
