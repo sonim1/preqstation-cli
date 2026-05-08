@@ -20,7 +20,7 @@ async function writeFakeNpmBin(binDir, version) {
     npmBin,
     [
       "#!/bin/sh",
-      'if [ "$1 $2 $3 $4" = "view @sonim1/preqstation-dispatcher version --json" ]; then',
+      'if [ "$1 $2 $3 $4" = "view @sonim1/preqstation version --json" ]; then',
       `  printf '"${version}"\\n'`,
       "  exit 0",
       "fi",
@@ -87,7 +87,7 @@ test("install openclaw runs the OpenClaw plugin install command", async () => {
     (await fs.readFile(logFile, "utf8")).trim().split("\n"),
     [
       "plugins inspect preqstation-dispatcher",
-      "plugins install @sonim1/preqstation-dispatcher --dangerously-force-unsafe-install",
+      "plugins install @sonim1/preqstation --dangerously-force-unsafe-install",
       "plugins inspect preqstation-dispatcher",
     ],
   );
@@ -95,14 +95,14 @@ test("install openclaw runs the OpenClaw plugin install command", async () => {
     ok: true,
     target: "openclaw",
     action: "installed",
-    package: "@sonim1/preqstation-dispatcher",
+    package: "@sonim1/preqstation",
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     package_version: currentPackageVersion,
   });
 });
 
-test("install openclaw updates the plugin when it already exists", async () => {
+test("install openclaw reinstalls from the renamed package when the plugin already exists", async () => {
   const currentPackageVersion = await readCurrentPackageVersion();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-openclaw-update-"));
   const binDir = path.join(tempDir, "bin");
@@ -161,15 +161,15 @@ test("install openclaw updates the plugin when it already exists", async () => {
     (await fs.readFile(logFile, "utf8")).trim().split("\n"),
     [
       "plugins inspect preqstation-dispatcher",
-      "plugins update preqstation-dispatcher",
+      "plugins install @sonim1/preqstation --dangerously-force-unsafe-install --force",
       "plugins inspect preqstation-dispatcher",
     ],
   );
   assert.deepEqual(JSON.parse(stdout.join("")), {
     ok: true,
     target: "openclaw",
-    action: "updated",
-    package: "@sonim1/preqstation-dispatcher",
+    action: "reinstalled",
+    package: "@sonim1/preqstation",
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     installed_version: "0.1.15",
@@ -177,7 +177,7 @@ test("install openclaw updates the plugin when it already exists", async () => {
   });
 });
 
-test("install openclaw reports failed when update completes but the recorded version does not change", async () => {
+test("install openclaw reports failed when reinstall completes but the recorded version does not change", async () => {
   const currentPackageVersion = await readCurrentPackageVersion();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-openclaw-update-fail-"));
   const binDir = path.join(tempDir, "bin");
@@ -222,12 +222,12 @@ test("install openclaw reports failed when update completes but the recorded ver
     ok: false,
     target: "openclaw",
     action: "failed",
-    package: "@sonim1/preqstation-dispatcher",
+    package: "@sonim1/preqstation",
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     installed_version: "0.1.15",
     package_version: currentPackageVersion,
-    error: `OpenClaw plugin did not update to ${currentPackageVersion}`,
+    error: `OpenClaw plugin did not reinstall at ${currentPackageVersion}`,
   });
 });
 
@@ -280,7 +280,7 @@ test("install openclaw reports already_current when the installed plugin version
     ok: true,
     target: "openclaw",
     action: "already_current",
-    package: "@sonim1/preqstation-dispatcher",
+    package: "@sonim1/preqstation",
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     installed_version: currentPackageVersion,
@@ -325,7 +325,7 @@ test("installOpenClawPlugin reports not_installed during update-only runs", asyn
     ok: true,
     target: "openclaw",
     action: "not_installed",
-    package: "@sonim1/preqstation-dispatcher",
+    package: "@sonim1/preqstation",
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     package_version: currentPackageVersion,
@@ -373,7 +373,7 @@ test("installOpenClawPlugin treats the plugin as current when npm latest matches
     ok: true,
     target: "openclaw",
     action: "already_current",
-    package: "@sonim1/preqstation-dispatcher",
+    package: "@sonim1/preqstation",
     plugin_id: "preqstation-dispatcher",
     restart_command: "openclaw gateway restart",
     installed_version: "0.1.21",

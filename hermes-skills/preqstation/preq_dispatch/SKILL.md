@@ -1,6 +1,6 @@
 ---
 name: preq_dispatch
-description: Parse trusted PREQSTATION dispatch messages and launch preqstation-dispatcher.
+description: Parse trusted PREQSTATION dispatch messages and launch preqstation.
 version: 1.0.0
 metadata:
   hermes:
@@ -33,10 +33,10 @@ Prefer `/preqstation_dispatch` for new Telegram dispatches.
 3. For task objectives such as `plan`, `implement`, `review`, `qa`, and `comment`, require `task_key`. Infer `project_key` from `task_key` when it is omitted.
 4. For project-level objectives such as `insight`, require `project_key`.
 5. For `objective=comment`, require the parsed `comment_id`/`commentId` and pass it as `--comment-id`. Do not launch comment dispatch without the target comment ID.
-6. Run `preqstation-dispatcher run` with only the parsed fields:
+6. Run `preqstation run` with only the parsed fields:
 
 ```bash
-preqstation-dispatcher run \
+preqstation run \
   --objective "<objective>" \
   --engine "<engine>" \
   --task-key "<task_key>" \

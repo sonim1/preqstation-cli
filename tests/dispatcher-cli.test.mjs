@@ -40,6 +40,21 @@ test("prints the package version for -v", async () => {
   assert.equal(stdout.join(""), `${await readCurrentPackageVersion()}\n`);
 });
 
+test("prints help with the public preqstation command name", async () => {
+  const stdout = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["--help"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+  });
+
+  const help = stdout.join("");
+  assert.equal(exitCode, 0);
+  assert.match(help, /preqstation run --project-key PROJ/);
+  assert.doesNotMatch(help, /preqstation-dispatcher run/);
+});
+
 test("run-json dispatches a Hermes payload through the shared runtime", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-cli-"));
   const payloadPath = path.join(tempDir, "payload.json");

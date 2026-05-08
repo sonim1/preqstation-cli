@@ -1,11 +1,11 @@
 {
-  "name": "@sonim1/preqstation-dispatcher",
-  "version": "0.1.33",
+  "name": "@sonim1/preqstation",
+  "version": "0.1.35",
   "private": false,
   "description": "PREQSTATION dispatcher with OpenClaw and Telegram-host support",
   "type": "module",
   "bin": {
-    "preqstation-dispatcher": "./bin/preqstation-dispatcher.mjs"
+    "preqstation": "bin/preqstation.mjs"
   },
   "files": [
     "bin",

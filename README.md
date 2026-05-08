@@ -4,14 +4,14 @@ PREQSTATION dispatcher with an OpenClaw adapter and a standalone CLI for Telegra
 
 Current surface version is recorded in [VERSION](VERSION).
 
-The npm package is `@sonim1/preqstation-dispatcher`. The OpenClaw plugin id is `preqstation-dispatcher`.
+The npm package is `@sonim1/preqstation`. The OpenClaw plugin id is `preqstation-dispatcher`.
 
 This repository is the durable public dispatcher surface for PREQSTATION. OpenClaw is the runtime host, while `preqstation-skill` remains the worker/runtime package used after dispatch.
 
 - `src/core/` owns project mapping, git worktree preparation, prompt rendering, and detached engine launch
 - `src/adapters/openclaw/` owns the OpenClaw `before_dispatch` hook and `/preqsetup`
 - `src/adapters/hermes/` owns optional Hermes payload normalization for deferred webhook experiments
-- `bin/preqstation-dispatcher.mjs` exposes a platform-neutral CLI
+- `bin/preqstation.mjs` exposes a platform-neutral CLI
 
 OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`.
 
@@ -49,14 +49,14 @@ This is intentionally not the old PTY/background session model. The plugin does 
 Default install from npm:
 
 ```bash
-openclaw plugins install @sonim1/preqstation-dispatcher --dangerously-force-unsafe-install
+openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
 openclaw gateway restart
 ```
 
 If the standalone CLI is already installed, it can run the plugin install command for you:
 
 ```bash
-preqstation-dispatcher install openclaw
+preqstation install openclaw
 openclaw gateway restart
 ```
 
@@ -106,12 +106,12 @@ For Hermes, these setup commands are run once on the Hermes host by the operator
 During real dispatch, Hermes Agent receives the Telegram message and calls this CLI through its terminal/tool execution.
 
 ```bash
-npm install -g @sonim1/preqstation-dispatcher
-preqstation-dispatcher install
-preqstation-dispatcher install hermes
-preqstation-dispatcher setup set PROJ /absolute/path/to/project
-preqstation-dispatcher setup auto PROJ=https://github.com/example/project
-preqstation-dispatcher setup status
+npm install -g @sonim1/preqstation
+preqstation install
+preqstation install hermes
+preqstation setup set PROJ /absolute/path/to/project
+preqstation setup auto PROJ=https://github.com/example/project
+preqstation setup status
 ```
 
 `install` without a target opens an interactive wizard that can install the OpenClaw adapter, the Hermes skill, and optional PREQ worker support for Claude Code, Codex, and Gemini CLI. Automation should call `install hermes` or `install openclaw` directly.
@@ -123,7 +123,7 @@ Hermes must have terminal/tool execution enabled. A chat-only Hermes profile can
 `install openclaw` runs:
 
 ```bash
-openclaw plugins install @sonim1/preqstation-dispatcher --dangerously-force-unsafe-install
+openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
 ```
 
 Then restart OpenClaw with `openclaw gateway restart`.
@@ -131,12 +131,12 @@ Then restart OpenClaw with `openclaw gateway restart`.
 After upgrading the npm package, sync the installed Hermes skill:
 
 ```bash
-npm update -g @sonim1/preqstation-dispatcher
-preqstation-dispatcher sync hermes
-preqstation-dispatcher status hermes
+npm update -g @sonim1/preqstation
+preqstation sync hermes
+preqstation status hermes
 ```
 
-If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation-dispatcher sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
+If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
 
 If you choose worker runtimes during the interactive `install` wizard, the wizard prompts for the current PREQSTATION server URL and then:
 
@@ -151,7 +151,7 @@ The wizard is idempotent. Existing runtime support is reported as `already curre
 Run a dispatch directly:
 
 ```bash
-preqstation-dispatcher run \
+preqstation run \
   --project-key PROJ \
   --task-key PROJ-327 \
   --objective implement \
@@ -162,13 +162,13 @@ preqstation-dispatcher run \
 Run from an optional webhook payload file for adapter smoke tests:
 
 ```bash
-preqstation-dispatcher run-json --payload /path/to/preq-webhook-payload.json
+preqstation run-json --payload /path/to/preq-webhook-payload.json
 ```
 
 Run from a legacy dispatch message:
 
 ```bash
-preqstation-dispatcher run-message --message 'preqstation implement PROJ-327 using codex'
+preqstation run-message --message 'preqstation implement PROJ-327 using codex'
 ```
 
 ### Public Config Contract
@@ -209,7 +209,7 @@ The Hermes Telegram flow is:
 
 1. PREQSTATION sends a structured `/preqstation_dispatch@PreqHermesBot` message to Telegram
 2. Hermes receives that message in its Telegram profile
-3. Hermes invokes `preqstation-dispatcher`
+3. Hermes invokes `preqstation`
 4. the dispatcher creates the worktree and launches `claude-code`, `codex`, or `gemini-cli`
 5. the launched worker updates PREQ through the normal `preqstation` lifecycle skill
 

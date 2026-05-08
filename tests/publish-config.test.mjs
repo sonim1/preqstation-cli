@@ -14,11 +14,11 @@ async function readRepoFile(name) {
 test("package metadata is publishable to the public npm registry", async () => {
   const pkg = JSON.parse(await readRepoFile("package.json"));
 
-  assert.equal(pkg.name, "@sonim1/preqstation-dispatcher");
+  assert.equal(pkg.name, "@sonim1/preqstation");
   assert.equal(pkg.private, false);
   assert.deepEqual(pkg.publishConfig, { access: "public" });
   assert.deepEqual(pkg.bin, {
-    "preqstation-dispatcher": "./bin/preqstation-dispatcher.mjs",
+    preqstation: "bin/preqstation.mjs",
   });
   assert.deepEqual(pkg.files, [
     "bin",
@@ -39,7 +39,7 @@ test("README documents npm install as the default path and linked install for lo
 
   assert.match(
     readme,
-    /openclaw plugins install @sonim1\/preqstation-dispatcher --dangerously-force-unsafe-install/,
+    /openclaw plugins install @sonim1\/preqstation --dangerously-force-unsafe-install/,
   );
   assert.match(readme, /OpenClaw plugin id is `preqstation-dispatcher`/);
   assert.match(readme, /Local linked install for active development/i);

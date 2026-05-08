@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PACKAGE_NAME = "@sonim1/preqstation-dispatcher";
+const PACKAGE_NAME = "@sonim1/preqstation";
 const SKILL_NAME = "preqstation_dispatch";
 const LEGACY_SKILL_NAME = "preq_dispatch";
 const TARGET = "hermes";

@@ -31,6 +31,7 @@ import {
 const UPDATE_HOST_TARGETS = ["openclaw", "hermes"];
 const UPDATE_RUNTIME_TARGETS = ["claude-code", "codex", "gemini-cli"];
 const PACKAGE_JSON_FILE = new URL("../../package.json", import.meta.url);
+const CLI_COMMAND_NAME = "preqstation";
 
 function getDispatchHome(env) {
   return (
@@ -188,19 +189,19 @@ function printUsage(stdout) {
   stdout.write(
     [
       "Usage:",
-      "  preqstation-dispatcher run --project-key PROJ --task-key PROJ-123 --objective implement --engine codex [--branch-name BRANCH] [--comment-id COMMENT_ID]",
-      "  preqstation-dispatcher run-json --payload /path/to/payload.json",
-      "  preqstation-dispatcher run-message --message 'preqstation implement PROJ-123 using codex'",
-      "  preqstation-dispatcher setup set PROJ /absolute/path/to/project",
-      "  preqstation-dispatcher setup auto PROJ=https://github.com/example/project",
-      "  preqstation-dispatcher setup status",
-      "  preqstation-dispatcher install [hermes|openclaw] [--json]",
-      "  preqstation-dispatcher install",
-      "  preqstation-dispatcher update [--force] [--json]",
-      "  preqstation-dispatcher sync hermes [--force]",
-      "  preqstation-dispatcher status hermes",
-      "  preqstation-dispatcher --version",
-      "  preqstation-dispatcher -v",
+      `  ${CLI_COMMAND_NAME} run --project-key PROJ --task-key PROJ-123 --objective implement --engine codex [--branch-name BRANCH] [--comment-id COMMENT_ID]`,
+      `  ${CLI_COMMAND_NAME} run-json --payload /path/to/payload.json`,
+      `  ${CLI_COMMAND_NAME} run-message --message 'preqstation implement PROJ-123 using codex'`,
+      `  ${CLI_COMMAND_NAME} setup set PROJ /absolute/path/to/project`,
+      `  ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project`,
+      `  ${CLI_COMMAND_NAME} setup status`,
+      `  ${CLI_COMMAND_NAME} install [hermes|openclaw] [--json]`,
+      `  ${CLI_COMMAND_NAME} install`,
+      `  ${CLI_COMMAND_NAME} update [--force] [--json]`,
+      `  ${CLI_COMMAND_NAME} sync hermes [--force]`,
+      `  ${CLI_COMMAND_NAME} status hermes`,
+      `  ${CLI_COMMAND_NAME} --version`,
+      `  ${CLI_COMMAND_NAME} -v`,
       "",
     ].join("\n"),
   );
@@ -496,7 +497,7 @@ async function handleSetup({ args, stdout, env }) {
 
   if (action === "set") {
     if (!projectKey || !projectPath) {
-      throw new Error("Usage: preqstation-dispatcher setup set PROJECT_KEY /absolute/path");
+      throw new Error(`Usage: ${CLI_COMMAND_NAME} setup set PROJECT_KEY /absolute/path`);
     }
     await writeProjectMapping({ mappingPath, projectKey, projectPath });
     stdout.write(
@@ -509,7 +510,7 @@ async function handleSetup({ args, stdout, env }) {
     const { entries, invalid } = parseAutoMappings(args.slice(1).join(" "));
     if (entries.length === 0) {
       throw new Error(
-        "Usage: preqstation-dispatcher setup auto PROJ=https://github.com/example/project",
+        `Usage: ${CLI_COMMAND_NAME} setup auto PROJ=https://github.com/example/project`,
       );
     }
 
@@ -544,7 +545,7 @@ async function handleSetup({ args, stdout, env }) {
     return;
   }
 
-  throw new Error("Usage: preqstation-dispatcher setup set PROJECT_KEY /absolute/path");
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} setup set PROJECT_KEY /absolute/path`);
 }
 
 async function handleInstallCommand({
@@ -587,7 +588,7 @@ async function handleInstallCommand({
     return result?.ok === false ? 1 : 0;
   }
 
-  throw new Error("Usage: preqstation-dispatcher install [hermes|openclaw]");
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} install [hermes|openclaw]`);
 }
 
 async function handleUpdateCommand({
@@ -604,7 +605,7 @@ async function handleUpdateCommand({
 }) {
   const { options, positional } = parseOptions(args);
   if (positional.length > 0) {
-    throw new Error("Usage: preqstation-dispatcher update [--force] [--json]");
+    throw new Error(`Usage: ${CLI_COMMAND_NAME} update [--force] [--json]`);
   }
 
   const results = [];
@@ -706,7 +707,7 @@ async function handlePlatformCommand({ command, args, stdout, env }) {
   }
 
   if (target !== "hermes") {
-    throw new Error(`Usage: preqstation-dispatcher ${command} hermes`);
+    throw new Error(`Usage: ${CLI_COMMAND_NAME} ${command} hermes`);
   }
 
   const result = await syncHermesSkill({

@@ -48,11 +48,11 @@ Recommended OpenClaw setup:
 Telegram hosts can launch the dispatcher without OpenClaw:
 
 ```bash
-preqstation-dispatcher setup set PROJ /absolute/path/to/project
-preqstation-dispatcher run --project-key PROJ --task-key PROJ-327 --objective implement --engine codex
+preqstation setup set PROJ /absolute/path/to/project
+preqstation run --project-key PROJ --task-key PROJ-327 --objective implement --engine codex
 ```
 
-Hermes Telegram messages should lead to `preqstation-dispatcher`; they should not implement the PREQ task inside the Hermes chat run.
+Hermes Telegram messages should lead to `preqstation`; they should not implement the PREQ task inside the Hermes chat run.
 
 ## Hard Rules
 

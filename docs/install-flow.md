@@ -1,9 +1,9 @@
-# `preqstation-dispatcher install` Flow
+# `preqstation install` Flow
 
-This document describes the current interactive `preqstation-dispatcher install` flow as implemented in the local repository.
+This document describes the current interactive `preqstation install` flow as implemented in the local repository.
 
 Scope:
-- interactive `preqstation-dispatcher install`
+- interactive `preqstation install`
 - direct host install commands such as `install openclaw` and `install hermes`
 - runtime worker support setup for `claude-code`, `codex`, and `gemini-cli`
 - remote PREQ MCP registration
@@ -21,7 +21,7 @@ Primary code paths:
 ### Interactive
 
 ```bash
-preqstation-dispatcher install
+preqstation install
 ```
 
 This enters the install wizard and asks the user to select:
@@ -32,8 +32,8 @@ This enters the install wizard and asks the user to select:
 ### Direct host install
 
 ```bash
-preqstation-dispatcher install openclaw
-preqstation-dispatcher install hermes
+preqstation install openclaw
+preqstation install hermes
 ```
 
 These bypass the wizard and install only the selected host.
@@ -112,24 +112,24 @@ Rules:
 
 Operation:
 1. read the local package version from `package.json`
-2. query npm for the published version of `@sonim1/preqstation-dispatcher`
+2. query npm for the published version of `@sonim1/preqstation`
 3. inspect the installed OpenClaw plugin
-4. install or update if needed
+4. install or force-reinstall from the current npm package if needed
 5. re-inspect to verify the recorded plugin version actually changed
 
 Commands used:
 
 ```bash
-npm view @sonim1/preqstation-dispatcher version --json
+npm view @sonim1/preqstation version --json
 openclaw plugins inspect preqstation-dispatcher
-openclaw plugins update preqstation-dispatcher
-openclaw plugins install @sonim1/preqstation-dispatcher --dangerously-force-unsafe-install
+openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install
+openclaw plugins install @sonim1/preqstation --dangerously-force-unsafe-install --force
 ```
 
 Status rules:
 - if installed version matches npm latest, return `already_current`
-- if update/install succeeds and the recorded version matches the target, return `updated` or `installed`
-- if update/install exits successfully but recorded version does not change to the target, return `failed`
+- if install/reinstall succeeds and the recorded version matches the target, return `installed` or `reinstalled`
+- if install/reinstall exits successfully but recorded version does not change to the target, return `failed`
 
 This post-check is important because OpenClaw can report a successful update command while leaving the installed plugin at the previous version.
 

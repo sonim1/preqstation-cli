@@ -4,19 +4,9 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const PACKAGE_NAME = "@sonim1/preqstation-dispatcher";
+const PACKAGE_NAME = "@sonim1/preqstation";
 const PLUGIN_ID = "preqstation-dispatcher";
 const PACKAGE_JSON_FILE = fileURLToPath(new URL("../package.json", import.meta.url));
-
-function isPluginAlreadyInstalledError(error) {
-  const message =
-    typeof error?.stderr === "string" && error.stderr
-      ? error.stderr
-      : error instanceof Error
-        ? error.message
-        : String(error);
-  return /plugin already exists/i.test(message);
-}
 
 function isPluginNotInstalledError(error) {
   const message =
@@ -108,7 +98,17 @@ export async function installOpenClawPlugin({
       };
     }
 
-    await exec("openclaw", ["plugins", "update", PLUGIN_ID], { env });
+    await exec(
+      "openclaw",
+      [
+        "plugins",
+        "install",
+        PACKAGE_NAME,
+        "--dangerously-force-unsafe-install",
+        "--force",
+      ],
+      { env },
+    );
     const refreshedVersion = await inspectInstalledPluginVersion({ env, exec });
     if (!refreshedVersion || refreshedVersion !== packageVersion) {
       return {
@@ -120,14 +120,14 @@ export async function installOpenClawPlugin({
         restart_command: "openclaw gateway restart",
         installed_version: refreshedVersion ?? installedVersion,
         package_version: packageVersion,
-        error: `OpenClaw plugin did not update to ${packageVersion}`,
+        error: `OpenClaw plugin did not reinstall at ${packageVersion}`,
         ...localVersionDetails,
       };
     }
     return {
       ok: true,
       target: "openclaw",
-      action: "updated",
+      action: "reinstalled",
       package: PACKAGE_NAME,
       plugin_id: PLUGIN_ID,
       restart_command: "openclaw gateway restart",
@@ -191,35 +191,6 @@ export async function installOpenClawPlugin({
       ...localVersionDetails,
     };
   } catch (error) {
-    if (!isPluginAlreadyInstalledError(error)) {
-      throw error;
-    }
-
-    await exec("openclaw", ["plugins", "update", PLUGIN_ID], { env });
-    const installedVersion = await inspectInstalledPluginVersion({ env, exec });
-    if (!installedVersion || installedVersion !== packageVersion) {
-      return {
-        ok: false,
-        target: "openclaw",
-        action: "failed",
-        package: PACKAGE_NAME,
-        plugin_id: PLUGIN_ID,
-        restart_command: "openclaw gateway restart",
-        installed_version: installedVersion,
-        package_version: packageVersion,
-        error: `OpenClaw plugin did not update to ${packageVersion}`,
-        ...localVersionDetails,
-      };
-    }
-    return {
-      ok: true,
-      target: "openclaw",
-      action: "updated",
-      package: PACKAGE_NAME,
-      plugin_id: PLUGIN_ID,
-      restart_command: "openclaw gateway restart",
-      package_version: packageVersion,
-      ...localVersionDetails,
-    };
+    throw error;
   }
 }

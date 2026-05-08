@@ -15,37 +15,37 @@ Webhook and Tailscale Funnel support is deferred. Keep it as an advanced option 
 There are two separate phases:
 
 - operator setup: run `setup` commands once on the machine where Hermes runs
-- agent dispatch: Hermes Agent receives Telegram messages and uses its terminal tool to run `preqstation-dispatcher run ...`
+- agent dispatch: Hermes Agent receives Telegram messages and uses its terminal tool to run `preqstation run ...`
 
-`preqstation-dispatcher` is not a replacement for Hermes Agent. It is the local launcher that Hermes Agent calls after the LLM parses a trusted PREQ dispatch message.
+`preqstation` is not a replacement for Hermes Agent. It is the local launcher that Hermes Agent calls after the LLM parses a trusted PREQ dispatch message.
 
 ```bash
-npm install -g @sonim1/preqstation-dispatcher
-preqstation-dispatcher install
-preqstation-dispatcher install hermes
-preqstation-dispatcher setup set PROJ /absolute/path/to/project
-preqstation-dispatcher setup auto PROJ=https://github.com/example/project
-preqstation-dispatcher setup status
+npm install -g @sonim1/preqstation
+preqstation install
+preqstation install hermes
+preqstation setup set PROJ /absolute/path/to/project
+preqstation setup auto PROJ=https://github.com/example/project
+preqstation setup status
 ```
 
-`install` without a target opens an interactive wizard for OpenClaw, Hermes, and optional PREQ MCP runtime setup. For scripts, use `preqstation-dispatcher install hermes`.
+`install` without a target opens an interactive wizard for OpenClaw, Hermes, and optional PREQ MCP runtime setup. For scripts, use `preqstation install hermes`.
 
 `install hermes` installs the bundled `preqstation_dispatch` skill to `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md`.
 
 When the npm package changes, update the local Hermes skill with:
 
 ```bash
-npm update -g @sonim1/preqstation-dispatcher
-preqstation-dispatcher sync hermes
-preqstation-dispatcher status hermes
+npm update -g @sonim1/preqstation
+preqstation sync hermes
+preqstation status hermes
 ```
 
-If the local skill was edited, `sync hermes` stops instead of overwriting it. Run `preqstation-dispatcher sync hermes --force` only when you want to back up and replace the local copy.
+If the local skill was edited, `sync hermes` stops instead of overwriting it. Run `preqstation sync hermes --force` only when you want to back up and replace the local copy.
 
 For bulk setup, put every local checkout under `~/projects` or set `PREQSTATION_REPO_ROOTS`, then pass the PREQ project keys with repo URLs:
 
 ```bash
-preqstation-dispatcher setup auto \
+preqstation setup auto \
   PROJ=https://github.com/sonim1/project-manager \
   PERS=https://github.com/sonim1/dev-blog
 ```
@@ -66,14 +66,14 @@ Recommended naming:
 Hermes profile: preq-coder
 Telegram bot username: PreqHermesBot
 Telegram route/chat: PREQ Dispatch
-Dispatcher CLI: preqstation-dispatcher
+Dispatcher CLI: preqstation
 ```
 
 Example profile intent:
 
 ```text
 Name: preq-coder
-Purpose: receive PREQSTATION Telegram dispatch messages and launch preqstation-dispatcher.
+Purpose: receive PREQSTATION Telegram dispatch messages and launch preqstation.
 Tooling: terminal access enabled.
 Rule: never implement PREQ tasks directly in the Hermes run.
 ```
@@ -81,7 +81,7 @@ Rule: never implement PREQ tasks directly in the Hermes run.
 The profile should have access to:
 
 - terminal/tool execution
-- the `preqstation-dispatcher` binary
+- the `preqstation` binary
 - the local project checkouts mapped in `~/.preqstation-dispatch/projects.json`
 - the worker CLIs it may launch
 - the PREQSTATION MCP/API credentials required by the launched workers
@@ -146,7 +146,7 @@ Never invent local project paths.
 
 Launch the dispatcher with the parsed fields:
 
-preqstation-dispatcher run \
+preqstation run \
   --objective "<objective>" \
   --engine "<engine>" \
   --task-key "<task_key>" \
@@ -168,7 +168,7 @@ The recommended projects-manager action is `Send to Hermes`. Its first implement
 1. build the structured `/preqstation_dispatch@PreqHermesBot` message
 2. send it to the configured Telegram channel or group
 3. mark the task dispatch target as `hermes-telegram`
-4. let Hermes launch `preqstation-dispatcher`
+4. let Hermes launch `preqstation`
 
 Do not add Hermes webhook URL or secret settings for the first MVP.
 
@@ -177,7 +177,7 @@ Do not add Hermes webhook URL or secret settings for the first MVP.
 After mapping a project locally, test the dispatcher directly:
 
 ```bash
-preqstation-dispatcher run \
+preqstation run \
   --project-key PROJ \
   --task-key PROJ-123 \
   --objective implement \
@@ -189,6 +189,6 @@ Then send the Telegram message shown above to the dispatch channel or group and 
 
 ## Webhook Deferred
 
-`preqstation-dispatcher run-json --payload /path/to/payload.json` remains available as a low-level adapter smoke test, but webhook delivery is not the primary Hermes integration path.
+`preqstation run-json --payload /path/to/payload.json` remains available as a low-level adapter smoke test, but webhook delivery is not the primary Hermes integration path.
 
 Use webhook delivery only when the Hermes host has a deliberate public ingress plan, request signing, replay protection, and operational monitoring.
