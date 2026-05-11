@@ -1,21 +1,44 @@
-# preqstation-dispatcher
+<p align="center">
+  <a href="https://preqstation.com">
+    <img src="https://raw.githubusercontent.com/sonim1/preqstation-landingpage/main/apps/landing/public/brand/logo.webp" alt="PreqStation" width="96" />
+  </a>
+</p>
 
-PREQSTATION dispatcher with an OpenClaw adapter and a standalone CLI for Telegram hosts such as Hermes.
+<h1 align="center">PreqStation PREQ CLI / Dispatcher</h1>
+
+<p align="center">
+  <strong>Operator-host setup, project mapping, health checks, and direct or integration-based agent dispatch.</strong>
+</p>
+
+<p align="center">
+  <a href="https://preqstation.com">Website</a> ·
+  <a href="https://preqstation.com/guide">Guide</a> ·
+  <a href="https://github.com/sonim1/preqstation">Core App</a> ·
+  <a href="https://github.com/sonim1/preqstation-dispatcher">PREQ CLI</a> ·
+  <a href="https://github.com/sonim1/preqstation-skill">Worker Skill</a>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@sonim1/preqstation"><img alt="npm @sonim1/preqstation" src="https://img.shields.io/npm/v/@sonim1/preqstation?label=%40sonim1%2Fpreqstation" /></a>
+  <a href="https://nodejs.org"><img alt="Node 22" src="https://img.shields.io/badge/Node-22-green.svg" /></a>
+</p>
+
+---
 
 Current surface version is recorded in [VERSION](VERSION).
 
-The npm package is `@sonim1/preqstation`. The OpenClaw plugin id is `preqstation-dispatcher`.
+The npm package is [`@sonim1/preqstation`](https://www.npmjs.com/package/@sonim1/preqstation), and the installed command is `preqstation`. The OpenClaw plugin id remains `preqstation-dispatcher`.
 
-This repository is the durable public dispatcher surface for PREQSTATION. OpenClaw is the runtime host, while `preqstation-skill` remains the worker/runtime package used after dispatch.
+## What this repo owns
 
+This repository is the durable public PREQ CLI and dispatcher surface for PreqStation. It prepares an operator host, configures request entrypoints, maps local projects, runs health checks, and can launch Claude Code, Codex, or Gemini directly or through integrations such as OpenClaw and Hermes.
+
+- `bin/preqstation.mjs` exposes the platform-neutral CLI
 - `src/core/` owns project mapping, git worktree preparation, prompt rendering, and detached engine launch
 - `src/adapters/openclaw/` owns the OpenClaw `before_dispatch` hook and `/preqsetup`
 - `src/adapters/hermes/` owns optional Hermes payload normalization for deferred webhook experiments
-- `bin/preqstation.mjs` exposes a platform-neutral CLI
 
-OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`.
-
-`preqstation-skill` remains the worker lifecycle skill used by Claude Code, Codex CLI, and Gemini CLI after the dispatcher launches them.
+OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`. [`preqstation-skill`](https://github.com/sonim1/preqstation-skill) remains the worker lifecycle package used by Claude Code, Codex CLI, and Gemini CLI after dispatch.
 
 ## What It Does
 
