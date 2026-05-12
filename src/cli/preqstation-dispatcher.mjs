@@ -1169,10 +1169,19 @@ async function runInstallSetupAuto({
     return null;
   }
 
+  const serverUrl =
+    installResult?.preqstation_server_url ||
+    (await resolveDefaultPreqstationServerUrlFn({
+      env,
+    }));
+  if (!serverUrl) {
+    return null;
+  }
+
   return runMcpBackedSetupAuto({
     env,
     stderr,
-    serverUrl: installResult?.preqstation_server_url || null,
+    serverUrl,
     fetchPreqstationProjectsFn,
     resolveDefaultPreqstationServerUrlFn,
   });

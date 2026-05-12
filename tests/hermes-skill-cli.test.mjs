@@ -270,6 +270,10 @@ test("install summary surfaces when the local repo is newer than the published O
     dispatchPreqRun: async () => {
       throw new Error("install must not dispatch");
     },
+    fetchPreqstationProjectsFn: async () => {
+      throw new Error("install must not fetch PREQ projects without a server URL");
+    },
+    resolveDefaultPreqstationServerUrlFn: async () => null,
   });
 
   const rendered = stdout.join("");
