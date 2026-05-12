@@ -52,158 +52,21 @@ Supported engines:
 
 Hermes is not an engine. Hermes can be a Telegram host that wakes this dispatcher.
 
-## OpenClaw Adapter
-
-The OpenClaw plugin intercepts PREQ dispatch messages with the OpenClaw `before_dispatch` hook and handles them before the normal chat run.
-
-Current flow:
-
-1. parse a PREQ dispatch message such as `!/skill preqstation-dispatch plan PROJ-327 using codex`
-2. resolve `project_cwd` from an explicit absolute path, OpenClaw plugin config, the shared `~/.preqstation-dispatch/projects.json` store, or legacy `MEMORY.md`
-3. create or reuse an auxiliary git worktree
-4. write `.preqstation-prompt.txt` into that worktree
-5. create a managed Task Flow record and park it in waiting with detached process metadata
-6. launch the selected CLI as a detached process
-
-This is intentionally not the old PTY/background session model. The plugin does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
-
-### Installation
-
-Most users should install through the PREQSTATION CLI:
-
-```bash
-npx -y @sonim1/preqstation@latest install
-```
-
-The installer configures request entrypoints, worker runtime support, MCP registrations, and local project mappings. See [INSTALLATION.md](INSTALLATION.md) for direct OpenClaw/Hermes install commands, local development links, and troubleshooting notes.
-
-## Standalone CLI
-
-Install this package wherever the dispatcher host runs. For Hermes, run the installer once on the Hermes host. During real dispatch, Hermes Agent receives the Telegram message and calls this CLI through its terminal/tool execution.
-
-### Quick Start
+## Quick Start
 
 ```bash
 npx -y @sonim1/preqstation@latest install
 npx -y @sonim1/preqstation@latest status
 ```
 
-`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup. Run `preqstation status` afterward to verify the installed surface without changing anything.
+`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup.
 
-### Command Reference
+## Documentation
 
-| Command | Use |
-| --- | --- |
-| `preqstation install` | Default interactive setup for entrypoints, runtimes, MCP, and project mappings. |
-| `preqstation update` | Refresh installed entrypoints and runtime support, then rerun project setup. |
-| `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, MCP, and project mappings. |
-| `preqstation doctor` | Read-only health check with the same status surface plus recommended next actions. |
-| `preqstation uninstall` | Remove installed entrypoints, runtime MCP registrations, and worker support while keeping local project mappings. |
-| `preqstation setup auto` | Fetch PREQ projects through MCP and map them to local git checkouts. |
-| `preqstation run ...` | Dispatch directly without OpenClaw or Hermes. |
-
-Detailed install, update, uninstall, project setup, and direct dispatch examples live in [INSTALLATION.md](INSTALLATION.md).
-
-### Public Config Contract
-
-The dispatcher host owns local paths. PREQ server payloads should only describe intent.
-
-Environment variables:
-
-- `PREQSTATION_DISPATCH_HOME`: default `~/.preqstation-dispatch`
-- `PREQSTATION_PROJECTS_FILE`: default `~/.preqstation-dispatch/projects.json`
-- `PREQSTATION_WORKTREE_ROOT`: default `~/.preqstation-dispatch/worktrees`
-- `PREQSTATION_WORKER_HOME`: optional shared worker home used for detached Claude/Codex/Gemini launches
-- `PREQSTATION_CLAUDE_HOME`: optional Claude-specific worker home override
-- `PREQSTATION_CODEX_HOME`: optional Codex-specific worker home override
-- `PREQSTATION_GEMINI_HOME`: optional Gemini-specific worker home override
-- `PREQSTATION_MEMORY_PATH`: optional legacy markdown mapping fallback
-- `PREQSTATION_REPO_ROOTS`: optional path-delimited roots for `setup auto`
-- `PREQSTATION_SERVER_URL` or `PREQSTATION_API_URL`: optional PREQSTATION server URL for `install`, `update`, and MCP-backed `setup auto`
-- `PREQSTATION_TOKEN`: optional bearer token override for MCP-backed `setup auto`; otherwise `~/.preqstation-dispatch/oauth.json` is reused or created through browser OAuth
-
-Detached worker launches never inherit a Hermes profile home by accident. When no worker-home override is set, the dispatcher falls back to the owning user's real home so worker MCP auth can stay separate from Telegram-host profile state.
-
-Shared mapping file shape:
-
-```json
-{
-  "projects": {
-    "PROJ": "/absolute/path/to/project"
-  }
-}
-```
-
-Do not commit this file. It belongs to the local dispatcher host.
-
-## Hermes Telegram Host
-
-Hermes can trigger the dispatcher by watching the same Telegram channel or group used for PREQ dispatch. See [docs/hermes.md](docs/hermes.md) for the recommended `preq-coder` profile and Telegram setup.
-
-The Hermes Telegram flow is:
-
-1. PREQSTATION sends a structured `/preqstation_dispatch@PreqHermesBot` message to Telegram
-2. Hermes receives that message in its Telegram profile
-3. Hermes invokes `preqstation`
-4. the dispatcher creates the worktree and launches `claude-code`, `codex`, or `gemini-cli`
-5. the launched worker updates PREQ through the normal `preqstation` lifecycle skill
-
-Telegram messages must not include local project paths. Webhook support is deferred and should stay an advanced option until there is a deliberate public ingress plan.
-
-## Command Shape
-
-Supported trigger styles:
-
-- `/skill preqstation-dispatch plan PROJ-327 using codex`
-- `/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Acceptance criteria"`
-- `!/skill preqstation-dispatch implement PROJ-327 using claude branch_name="task/proj-327-example"`
-- `preqstation implement PROJ-327 with codex`
-- `preqstation implement PROJ-327 in /absolute/path/to/repo with codex`
-
-Parsed fields:
-
-- engine
-- task key
-- project key
-- objective
-- optional `branch_name`
-- optional `ask_hint`
-- optional `insight_prompt_b64`
-
-## Detached Runtime
-
-Detached process artifacts live inside the worktree:
-
-- `.preqstation-dispatch/<engine>.pid`
-- `.preqstation-dispatch/<engine>.log`
-
-Current detached Codex launch uses:
-
-```bash
-codex exec --dangerously-bypass-approvals-and-sandbox "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop."
-```
-
-Claude Code and Gemini CLI use the same bootstrap idea with their own binaries.
-
-## Publishing
-
-Pushes to `main` run `.github/workflows/publish.yml`, test the package, and publish to npm automatically.
-
-Release behavior:
-
-- if the current `package.json` version is not on npm yet, the workflow publishes it as-is
-- if that version already exists on npm, the workflow automatically bumps a patch version, syncs [VERSION](VERSION), commits the bump back to `main`, and publishes the new version
-- the follow-up run triggered by that bump commit is skipped because the actor is `github-actions[bot]`
-
-One-time setup before the first release:
-
-- add an `NPM_TOKEN` repository secret, or
-- configure npm trusted publishing for this publishing repository and package
-
-The workflow is ready for both: it grants `id-token: write` for trusted publishing and also passes `NODE_AUTH_TOKEN` when `NPM_TOKEN` is configured.
-
-## Current Limitations
-
-- Completion emergence back into the original chat thread is not wired yet.
-- OpenClaw Task Flow tracking is OpenClaw-adapter only. Hermes runs use CLI output and detached log files.
-- Detached process logs are written to the worktree and are not streamed live into Telegram.
+- [Installation and CLI Usage](docs/INSTALLATION.md) — install/update/uninstall, project setup, direct dispatch, and command reference
+- [Configuration](docs/CONFIGURATION.md) — dispatcher host env vars and local project mapping file shape
+- [OpenClaw Adapter](docs/OPENCLAW_ADAPTER.md) — `before_dispatch` flow and `/preqsetup` path
+- [Hermes Telegram Host](docs/hermes.md) — Telegram-hosted dispatcher flow
+- [Command Shape](docs/COMMANDS.md) — supported trigger styles and parsed fields
+- [Detached Runtime](docs/RUNTIME.md) — process artifacts, launch model, and limitations
+- [Publishing](docs/PUBLISHING.md) — npm release workflow
