@@ -27,7 +27,7 @@
 
 Current surface version is recorded in [VERSION](VERSION).
 
-The npm package is [`@sonim1/preqstation`](https://www.npmjs.com/package/@sonim1/preqstation), and the installed command is `preqstation`. The OpenClaw plugin id remains `preqstation-dispatcher`.
+The npm package is [`@sonim1/preqstation`](https://www.npmjs.com/package/@sonim1/preqstation), and the installed command is `preqstation`. The OpenClaw plugin id is `preqstation-dispatcher`.
 
 ## What this repo owns
 
