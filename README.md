@@ -42,7 +42,7 @@ OpenClaw still loads this package through `openclaw.plugin.json` and root `index
 
 ## What It Does
 
-The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-prompt.txt`, and launches the selected engine as a detached process.
+The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-prompt.txt`, and launches the selected engine as a detached process, including detached Codex runs. This is intentionally not the old PTY/background session model: it does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
 
 Supported engines:
 
@@ -52,18 +52,31 @@ Supported engines:
 
 Hermes is not an engine. Hermes can be a Telegram host that wakes this dispatcher.
 
-## Quick Start
+## Usage
+
+### Quick Start
 
 ```bash
 npx -y @sonim1/preqstation@latest install
 npx -y @sonim1/preqstation@latest status
 ```
 
-`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup.
+`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup. See [INSTALLATION.md](INSTALLATION.md) for detailed install, update, uninstall, project setup, and local development flows.
+
+### Command Reference
+
+| Command | Description |
+| --- | --- |
+| `preqstation install` | Interactive setup for entrypoints, agent runtimes, MCP registration, and project mappings. |
+| `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, MCP, and project mappings. |
+| `preqstation doctor` | Read-only health check for dispatcher configuration and runtime availability. |
+| `preqstation setup auto` | Discover local projects and save shared PREQ project mappings. |
+| `preqstation run` | Dispatch a PREQ task or project objective directly from the CLI. |
+| `preqstation uninstall` | Remove installed entrypoints, runtime support, or project mappings. |
 
 ## Documentation
 
-- [Installation and CLI Usage](docs/INSTALLATION.md) — install/update/uninstall, project setup, direct dispatch, and command reference
+- [Installation and CLI Usage](docs/INSTALLATION.md) — install/update/uninstall, project setup, direct dispatch, and extended command reference
 - [Configuration](docs/CONFIGURATION.md) — dispatcher host env vars and local project mapping file shape
 - [OpenClaw Adapter](docs/OPENCLAW_ADAPTER.md) — `before_dispatch` flow and `/preqsetup` path
 - [Hermes Telegram Host](docs/hermes.md) — Telegram-hosted dispatcher flow
