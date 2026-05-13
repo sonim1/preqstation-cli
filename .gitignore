@@ -2,3 +2,9 @@ node_modules/
 npm-debug.log*
 .DS_Store
 .worktrees/
+
+# Local agent planning artifacts
+.omc/
+.superpowers/
+docs/superpowers/
+superpowers/

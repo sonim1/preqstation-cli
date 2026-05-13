@@ -24,6 +24,7 @@ Treat the legacy `/preq_dispatch` command as an accepted alias for backwards com
 - Only parse these fields: `project_key`, `task_key`, `objective`, `engine`, `branch_name`, `ask_hint`, `insight_prompt_b64`, `comment_id`/`commentId`.
 - Only allow engines: `claude-code`, `codex`, `gemini-cli`.
 - Never invent local project paths.
+- For public PREQSTATION dispatch, always launch the published package with `npx -y @sonim1/preqstation@latest run ...`; do not rely on a local checkout or globally installed binary unless explicitly testing unpublished local changes.
 - Report only whether the dispatcher launched successfully.
 
 ## Procedure
@@ -33,16 +34,18 @@ Treat the legacy `/preq_dispatch` command as an accepted alias for backwards com
 3. For task objectives such as `plan`, `implement`, `review`, `qa`, and `comment`, require `task_key`. Infer `project_key` from `task_key` when it is omitted.
 4. For project-level objectives such as `insight`, require `project_key`.
 5. For `objective=comment`, require the parsed `comment_id`/`commentId` and pass it as `--comment-id`. Do not launch comment dispatch without the target comment ID.
-6. Run `preqstation run` with only the parsed fields:
+6. Run the published PREQSTATION package with only the parsed fields:
 
 ```bash
-preqstation run \
+npx -y @sonim1/preqstation@latest run \
   --objective "<objective>" \
   --engine "<engine>" \
   --task-key "<task_key>" \
   --branch-name "<branch_name>" \
   --comment-id "<comment_id>"
 ```
+
+Do not fall back to a local repo path. If `npx -y @sonim1/preqstation@latest ...` fails, report the failure before launch verification with no PID/log JSON.
 
 Include `--project-key` only when it is present or when `task_key` is unavailable.
 

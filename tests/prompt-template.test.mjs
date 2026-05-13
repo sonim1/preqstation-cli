@@ -38,11 +38,11 @@ test("renders ask-specific note rewrite guidance", () => {
     engine: "codex",
     cwd: "/tmp/worktree/proj/task-proj-328-edit-task-isyu",
     projectCwd: "/tmp/project",
-    askHint: "Acceptance criteria 중심으로 정리해줘",
+    askHint: "Summarize around acceptance criteria",
   });
 
   assert.match(prompt, /User Objective: ask/);
-  assert.match(prompt, /Ask Hint: Acceptance criteria 중심으로 정리해줘/);
+  assert.match(prompt, /Ask Hint: Summarize around acceptance criteria/);
   assert.match(prompt, /preq_update_task_note/);
   assert.match(prompt, /preq_update_task_status/);
   assert.match(prompt, /keep the workflow status unchanged/);
@@ -72,12 +72,12 @@ test("renders insight-specific task generation guidance", () => {
     cwd: "/tmp/worktree/proj/preqstation-proj",
     projectCwd: "/tmp/project",
     insightPromptB64:
-      "Q29ubmVjdGlvbnMg7Y6Y7J207KeAIOqwnO2OuCDsnpHsl4XsnYQg64KY64ig7KSYCuuqqOuwlOydvCDtnZDrpoTrj4Qg6rCZ7J20IOu0kOykmA==",
+      "QnJlYWsgZG93biB0aGUgQ29ubmVjdGlvbnMgcGFnZSByZWRlc2lnbgpBbHNvIHJldmlldyB0aGUgbW9iaWxlIGZsb3c=",
   });
 
   assert.match(prompt, /Task ID: N\/A/);
   assert.match(prompt, /User Objective: insight/);
-  assert.match(prompt, /Insight Prompt: Connections 페이지 개편 작업을 나눠줘/);
+  assert.match(prompt, /Insight Prompt: Break down the Connections page redesign/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
   assert.match(prompt, /preq_list_tasks\(projectKey=\.\.\., detail=full\)/);
   assert.match(prompt, /preq_create_task/);

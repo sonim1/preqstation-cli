@@ -64,7 +64,7 @@ test("parses plain-language preqstation dispatch text", () => {
 
 test("parses ask objective with ask_hint metadata", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Acceptance criteria 중심으로 정리해줘"',
+    '!/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Summarize around acceptance criteria"',
   );
 
   assert.deepEqual(parsed, {
@@ -73,12 +73,12 @@ test("parses ask objective with ask_hint metadata", () => {
     projectKey: "PROJ",
     objective: "ask",
     branchName: null,
-    askHint: "Acceptance criteria 중심으로 정리해줘",
+    askHint: "Summarize around acceptance criteria",
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
     rawMessage:
-      '!/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Acceptance criteria 중심으로 정리해줘"',
+      '!/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Summarize around acceptance criteria"',
   });
 });
 
