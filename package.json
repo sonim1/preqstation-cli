@@ -1,6 +1,6 @@
 {
   "name": "@sonim1/preqstation",
-  "version": "0.1.38",
+  "version": "0.1.39",
   "private": false,
   "description": "PREQSTATION dispatcher with OpenClaw and Telegram-host support",
   "type": "module",
