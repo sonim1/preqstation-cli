@@ -92,6 +92,8 @@ export function normalizeRepoUrl(repoUrl) {
   return value
     .replace(/^git@github\.com:/iu, "https://github.com/")
     .replace(/^ssh:\/\/git@github\.com\//iu, "https://github.com/")
+    .replace(/^git@gitlab\.com:/iu, "https://gitlab.com/")
+    .replace(/^ssh:\/\/git@gitlab\.com\//iu, "https://gitlab.com/")
     .replace(/\.git$/iu, "")
     .replace(/\/$/u, "")
     .toLowerCase();

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,7 @@ import path from "node:path";
 import {
   loadDispatchProjectMappings,
   loadProjectMappings,
+  matchProjectsToRepoRoots,
   resolveProjectCwd,
   resolveProjectCwdWithSources,
 } from "../src/project-mapping.mjs";
@@ -101,6 +103,29 @@ test("loads shared PREQ dispatch mappings from projects.json", async () => {
 
   assert.deepEqual(mappings, {
     PROJ: "/Users/example/projects/projects-manager",
+  });
+});
+
+test("matches GitLab SSH remotes to HTTPS project URLs", async () => {
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-gitlab-ssh-"),
+  );
+  const projectPath = path.join(tempDir, "group", "repo");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@gitlab.com:group/repo.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
+
+  const discovered = await matchProjectsToRepoRoots(
+    [{ projectKey: "GL", repoUrl: "https://gitlab.com/group/repo" }],
+    tempDir,
+  );
+
+  assert.deepEqual(discovered.matched, {
+    GL: projectPath,
   });
 });
 
