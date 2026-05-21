@@ -18,7 +18,7 @@ test("README describes the OpenClaw plugin install surface", async () => {
   assert.match(readme, /openclaw\.plugin\.json/);
   assert.match(readme, /before_dispatch/);
   assert.match(readme, /detached codex/i);
-  assert.match(installation, /\/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>/);
+  assert.match(installation, /\/preqstation setup set <PROJECT_KEY> <ABSOLUTE_PATH>/);
 });
 
 test("README no longer documents PTY background monitoring as the runtime path", async () => {
@@ -43,7 +43,7 @@ test("Hermes docs make Telegram delivery the primary integration path", async ()
   assert.match(readme, /Hermes Telegram/i);
   assert.match(readme, /webhook[\s\S]*deferred|deferred[\s\S]*webhook/i);
   assert.match(hermes, /Telegram channel/i);
-  assert.match(hermes, /\/preqstation_dispatch@PreqHermesBot/);
+  assert.match(hermes, /\/preqstation dispatch/);
   assert.match(hermes, /Bot-to-Bot Communication Mode/i);
   assert.match(hermes, /Webhook.*deferred/i);
   assert.match(skill, /Telegram host such as Hermes/i);

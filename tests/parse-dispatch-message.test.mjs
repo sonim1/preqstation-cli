@@ -5,7 +5,7 @@ import { parseDispatchMessage } from "../src/parse-dispatch-message.mjs";
 
 test("parses telegram relay dispatch syntax", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
+    '!/preqstation dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
   );
 
   assert.deepEqual(parsed, {
@@ -19,33 +19,13 @@ test("parses telegram relay dispatch syntax", () => {
     qaRunId: null,
     qaTaskKeys: null,
     rawMessage:
-      '!/skill preqstation-dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
+      '!/preqstation dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
   });
 });
 
-test("parses underscore alias dispatch syntax", () => {
+test("parses explicit preqstation dispatch text", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation_dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
-  );
-
-  assert.deepEqual(parsed, {
-    engine: "codex",
-    taskKey: "PROJ-327",
-    projectKey: "PROJ",
-    objective: "plan",
-    branchName: "task/proj-327/browser-notification-chuga",
-    askHint: null,
-    insightPromptB64: null,
-    qaRunId: null,
-    qaTaskKeys: null,
-    rawMessage:
-      '!/skill preqstation_dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
-  });
-});
-
-test("parses plain-language preqstation dispatch text", () => {
-  const parsed = parseDispatchMessage(
-    "preqstation implement PROJ-12 with codex",
+    "/preqstation dispatch implement PROJ-12 with codex",
   );
 
   assert.deepEqual(parsed, {
@@ -58,13 +38,13 @@ test("parses plain-language preqstation dispatch text", () => {
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
-    rawMessage: "preqstation implement PROJ-12 with codex",
+    rawMessage: "/preqstation dispatch implement PROJ-12 with codex",
   });
 });
 
 test("parses ask objective with ask_hint metadata", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Summarize around acceptance criteria"',
+    '!/preqstation dispatch ask PROJ-328 using codex ask_hint="Summarize around acceptance criteria"',
   );
 
   assert.deepEqual(parsed, {
@@ -78,13 +58,13 @@ test("parses ask objective with ask_hint metadata", () => {
     qaRunId: null,
     qaTaskKeys: null,
     rawMessage:
-      '!/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Summarize around acceptance criteria"',
+      '!/preqstation dispatch ask PROJ-328 using codex ask_hint="Summarize around acceptance criteria"',
   });
 });
 
 test("parses project-level insight commands without a task key", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch insight PROJ using codex insight_prompt_b64="cHJvbXB0LWJhc2U2NA=="',
+    '!/preqstation dispatch insight PROJ using codex insight_prompt_b64="cHJvbXB0LWJhc2U2NA=="',
   );
 
   assert.deepEqual(parsed, {
@@ -98,13 +78,13 @@ test("parses project-level insight commands without a task key", () => {
     qaRunId: null,
     qaTaskKeys: null,
     rawMessage:
-      '!/skill preqstation-dispatch insight PROJ using codex insight_prompt_b64="cHJvbXB0LWJhc2U2NA=="',
+      '!/preqstation dispatch insight PROJ using codex insight_prompt_b64="cHJvbXB0LWJhc2U2NA=="',
   });
 });
 
 test("parses project-level qa metadata without treating qa_task_keys as the primary task", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch qa PROJ using claude-code branch_name="main" qa_run_id="run-123" qa_task_keys="PROJ-1,PROJ-2"',
+    '!/preqstation dispatch qa PROJ using claude-code branch_name="main" qa_run_id="run-123" qa_task_keys="PROJ-1,PROJ-2"',
   );
 
   assert.deepEqual(parsed, {
@@ -118,13 +98,13 @@ test("parses project-level qa metadata without treating qa_task_keys as the prim
     qaRunId: "run-123",
     qaTaskKeys: ["PROJ-1", "PROJ-2"],
     rawMessage:
-      '!/skill preqstation-dispatch qa PROJ using claude-code branch_name="main" qa_run_id="run-123" qa_task_keys="PROJ-1,PROJ-2"',
+      '!/preqstation dispatch qa PROJ using claude-code branch_name="main" qa_run_id="run-123" qa_task_keys="PROJ-1,PROJ-2"',
   });
 });
 
 test("parses task-level qa commands with a real task key", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch qa PROJ-328 using codex',
+    '!/preqstation dispatch qa PROJ-328 using codex',
   );
 
   assert.deepEqual(parsed, {
@@ -137,13 +117,13 @@ test("parses task-level qa commands with a real task key", () => {
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
-    rawMessage: '!/skill preqstation-dispatch qa PROJ-328 using codex',
+    rawMessage: '!/preqstation dispatch qa PROJ-328 using codex',
   });
 });
 
 test("parses comment objective with comment_id metadata", () => {
   const parsed = parseDispatchMessage(
-    '!/skill preqstation-dispatch comment PROJ-329 using codex comment_id="comment-abc-123"',
+    '!/preqstation dispatch comment PROJ-329 using codex comment_id="comment-abc-123"',
   );
 
   assert.deepEqual(parsed, {
@@ -158,16 +138,27 @@ test("parses comment objective with comment_id metadata", () => {
     qaTaskKeys: null,
     commentId: "comment-abc-123",
     rawMessage:
-      '!/skill preqstation-dispatch comment PROJ-329 using codex comment_id="comment-abc-123"',
+      '!/preqstation dispatch comment PROJ-329 using codex comment_id="comment-abc-123"',
   });
 });
 
 test("parses comment objective with camelCase commentId metadata", () => {
   const parsed = parseDispatchMessage(
-    "preqstation comment PROJ-330 using claude-code commentId=comment-def-456",
+    "/preqstation dispatch comment PROJ-330 using claude-code commentId=comment-def-456",
   );
 
   assert.equal(parsed.commentId, "comment-def-456");
+});
+
+test("bare preqstation is help-only and not parsed as dispatch", () => {
+  assert.equal(parseDispatchMessage("/preqstation"), null);
+  assert.equal(parseDispatchMessage("/preqstation help"), null);
+});
+
+test("rejects removed legacy dispatch commands", () => {
+  assert.equal(parseDispatchMessage("preqstation implement PROJ-12 with codex"), null);
+  assert.equal(parseDispatchMessage("!/skill preqstation-dispatch plan PROJ-327 using codex"), null);
+  assert.equal(parseDispatchMessage("!/skill preqstation_dispatch plan PROJ-327 using codex"), null);
 });
 
 test("returns null for unrelated messages", () => {

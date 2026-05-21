@@ -42,20 +42,23 @@ test("install hermes copies the bundled PREQ dispatch skill with provenance", as
     hermesHome,
     "skills",
     "preqstation",
-    "preqstation_dispatch",
+    "preqstation",
     "SKILL.md",
   );
   const metadataFile = path.join(
     hermesHome,
     "skills",
     "preqstation",
-    "preqstation_dispatch",
+    "preqstation",
     ".preqstation-dispatcher.json",
   );
 
   assert.equal(exitCode, 0);
   const skillText = await fs.readFile(skillFile, "utf8");
-  assert.match(skillText, /name: preqstation_dispatch/);
+  assert.match(skillText, /name: preqstation/);
+  assert.match(skillText, /\/preqstation dispatch/);
+  assert.doesNotMatch(skillText, /\/preqstation_dispatch/);
+  assert.doesNotMatch(skillText, /\/preq_dispatch/);
   assert.match(skillText, /npx -y @sonim1\/preqstation@latest run/);
   assert.doesNotMatch(skillText, /\bpreqstation run/);
   assert.match(skillText, /comment_id/);
@@ -82,7 +85,7 @@ test("uninstallHermesSkill removes the managed Hermes skill", async () => {
     hermesHome,
     "skills",
     "preqstation",
-    "preqstation_dispatch",
+    "preqstation",
     "SKILL.md",
   );
 
@@ -106,7 +109,7 @@ test("uninstallHermesSkill backs up locally modified skills when forced", async 
     hermesHome,
     "skills",
     "preqstation",
-    "preqstation_dispatch",
+    "preqstation",
     "SKILL.md",
   );
 
@@ -122,7 +125,7 @@ test("uninstallHermesSkill backs up locally modified skills when forced", async 
 
   assert.equal(result.ok, true);
   assert.equal(result.action, "removed");
-  assert.match(result.backup_file, /preqstation_dispatch\.bak-\d+\.SKILL\.md$/);
+  assert.match(result.backup_file, /preqstation\.bak-\d+\.SKILL\.md$/);
   await assert.rejects(fs.stat(skillFile), /ENOENT/);
   assert.match(await fs.readFile(result.backup_file, "utf8"), /Local operator note/);
 });
@@ -342,7 +345,7 @@ test("sync hermes refuses user-modified skills unless forced", async () => {
     hermesHome,
     "skills",
     "preqstation",
-    "preqstation_dispatch",
+    "preqstation",
     "SKILL.md",
   );
   await fs.appendFile(skillFile, "\n# local note\n", "utf8");
@@ -372,7 +375,7 @@ test("sync hermes refuses user-modified skills unless forced", async () => {
   assert.equal(forcedExitCode, 0);
   assert.equal(result.action, "updated");
   assert.match(result.backup_file, /SKILL\.md\.bak-/u);
-  assert.match(await fs.readFile(skillFile, "utf8"), /name: preqstation_dispatch/);
+  assert.match(await fs.readFile(skillFile, "utf8"), /name: preqstation/);
   assert.doesNotMatch(await fs.readFile(skillFile, "utf8"), /# local note/);
 });
 
@@ -403,14 +406,14 @@ test("status hermes reports whether the installed skill is current", async () =>
       hermesHome,
       "skills",
       "preqstation",
-      "preqstation_dispatch",
+      "preqstation",
       "SKILL.md",
     ),
     metadata_file: path.join(
       hermesHome,
       "skills",
       "preqstation",
-      "preqstation_dispatch",
+      "preqstation",
       ".preqstation-dispatcher.json",
     ),
   });

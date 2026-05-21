@@ -35,7 +35,7 @@ This repository is the durable public PREQ CLI and dispatcher surface for PreqSt
 
 - `bin/preqstation.mjs` exposes the platform-neutral CLI
 - `src/core/` owns project mapping, git worktree preparation, prompt rendering, and detached engine launch
-- `src/adapters/openclaw/` owns the OpenClaw `before_dispatch` hook and `/preqsetup`
+- `src/adapters/openclaw/` owns the OpenClaw `before_dispatch` hook and `/preqstation`
 - `src/adapters/hermes/` owns optional Hermes payload normalization for deferred webhook experiments
 
 OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`. [`preqstation-skill`](https://github.com/sonim1/preqstation-skill) remains the worker lifecycle package used by Claude Code, Codex CLI, and Gemini CLI after dispatch.
@@ -78,7 +78,7 @@ npx -y @sonim1/preqstation@latest status
 
 - [Installation and CLI Usage](docs/INSTALLATION.md) — install/update/uninstall, project setup, direct dispatch, and extended command reference
 - [Configuration](docs/CONFIGURATION.md) — dispatcher host env vars and local project mapping file shape
-- [OpenClaw Adapter](docs/OPENCLAW_ADAPTER.md) — `before_dispatch` flow and `/preqsetup` path
+- [OpenClaw Adapter](docs/OPENCLAW_ADAPTER.md) — `before_dispatch` flow and `/preqstation` path
 - [Hermes Telegram Host](docs/hermes.md) — Telegram-hosted dispatcher flow
 - [Command Shape](docs/COMMANDS.md) — supported trigger styles and parsed fields
 - [Detached Runtime](docs/RUNTIME.md) — process artifacts, launch model, and limitations

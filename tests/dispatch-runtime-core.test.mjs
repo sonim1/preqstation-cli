@@ -7,7 +7,7 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, 
   const calls = [];
   const parsed = {
     rawMessage:
-      '!/skill preqstation-dispatch implement PROJ-123 using codex branch_name="task/proj-123-example"',
+      '!/preqstation dispatch implement PROJ-123 using codex branch_name="task/proj-123-example"',
     engine: "codex",
     taskKey: "PROJ-123",
     projectKey: "PROJ",

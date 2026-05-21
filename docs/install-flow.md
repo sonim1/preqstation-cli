@@ -96,12 +96,12 @@ Each selected host is processed in sequence.
 ### Hermes Agent
 
 Operation:
-- sync the bundled `preqstation_dispatch` Hermes skill
+- sync the bundled `preqstation` Hermes skill
 
 Installed location:
 
 ```text
-~/.hermes/skills/preqstation/preqstation_dispatch/
+~/.hermes/skills/preqstation/preqstation/
 ```
 
 Rules:
@@ -355,7 +355,7 @@ Examples of real failure conditions:
 ### Hermes
 
 ```text
-~/.hermes/skills/preqstation/preqstation_dispatch/
+~/.hermes/skills/preqstation/preqstation/
 ```
 
 ### OpenClaw
