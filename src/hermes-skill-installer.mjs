@@ -5,14 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE_NAME = "@sonim1/preqstation";
-const SKILL_NAME = "preqstation_dispatch";
-const LEGACY_SKILL_NAME = "preq_dispatch";
+const SKILL_NAME = "preqstation";
+const LEGACY_SKILL_NAMES = ["preqstation_dispatch", "preq_dispatch"];
 const TARGET = "hermes";
 const BUNDLED_SKILL_FILE = fileURLToPath(
-  new URL("../hermes-skills/preqstation/preqstation_dispatch/SKILL.md", import.meta.url),
-);
-const LEGACY_BUNDLED_SKILL_FILE = fileURLToPath(
-  new URL("../hermes-skills/preqstation/preq_dispatch/SKILL.md", import.meta.url),
+  new URL("../hermes-skills/preqstation/preqstation/SKILL.md", import.meta.url),
 );
 const PACKAGE_JSON_FILE = fileURLToPath(new URL("../package.json", import.meta.url));
 
@@ -43,7 +40,7 @@ function getSkillPaths(env = process.env) {
 }
 
 function getLegacySkillPaths(env = process.env) {
-  return getSkillPathsForName(LEGACY_SKILL_NAME, env);
+  return LEGACY_SKILL_NAMES.map((skillName) => getSkillPathsForName(skillName, env));
 }
 
 async function readJsonFile(filePath) {
@@ -101,37 +98,50 @@ function detectUserModified({ installedContent, metadata, bundledSha }) {
   );
 }
 
-async function removeLegacyInstall({
+function detectLegacyUserModified({ installedContent, metadata, skillName }) {
+  if (installedContent === null) {
+    return false;
+  }
+
+  const installedSha = sha256(installedContent);
+  const managed =
+    metadata?.package === PACKAGE_NAME &&
+    metadata?.skill === skillName &&
+    typeof metadata?.sha256 === "string";
+  return managed ? installedSha !== metadata.sha256 : true;
+}
+
+async function removeLegacyInstalls({
   env,
   force,
-  bundledSha,
   backups,
 }) {
-  const { skillDir, skillFile, metadataFile } = getLegacySkillPaths(env);
-  const installedContent = await readInstalledSkill(skillFile);
-  if (installedContent === null) {
-    return;
-  }
+  for (const paths of getLegacySkillPaths(env)) {
+    const installedContent = await readInstalledSkill(paths.skillFile);
+    if (installedContent === null) {
+      continue;
+    }
 
-  const metadata = await readMetadata(metadataFile);
-  const userModified = detectUserModified({
-    installedContent,
-    metadata,
-    bundledSha,
-  });
-  if (userModified && !force) {
-    throw new Error(
-      "Legacy Hermes skill has local changes. Run `preqstation-dispatcher sync hermes --force` to back up and replace it.",
-    );
-  }
+    const metadata = await readMetadata(paths.metadataFile);
+    const userModified = detectLegacyUserModified({
+      installedContent,
+      metadata,
+      skillName: path.basename(paths.skillDir),
+    });
+    if (userModified && !force) {
+      throw new Error(
+        "Legacy Hermes skill has local changes. Run `preqstation sync hermes --force` to back up and replace it.",
+      );
+    }
 
-  if (force) {
-    const backupFile = `${skillFile}.bak-${backupSuffix()}`;
-    await fs.copyFile(skillFile, backupFile);
-    backups.push(backupFile);
-  }
+    if (force) {
+      const backupFile = `${paths.skillFile}.bak-${backupSuffix()}`;
+      await fs.copyFile(paths.skillFile, backupFile);
+      backups.push(backupFile);
+    }
 
-  await fs.rm(skillDir, { recursive: true, force: true });
+    await fs.rm(paths.skillDir, { recursive: true, force: true });
+  }
 }
 
 export async function getHermesSkillStatus({ env = process.env } = {}) {
@@ -139,12 +149,26 @@ export async function getHermesSkillStatus({ env = process.env } = {}) {
   const legacyPaths = getLegacySkillPaths(env);
   const bundledContent = await fs.readFile(BUNDLED_SKILL_FILE, "utf8");
   const bundledSha = sha256(bundledContent);
-  const legacyBundledContent = await fs.readFile(LEGACY_BUNDLED_SKILL_FILE, "utf8");
-  const legacyBundledSha = sha256(legacyBundledContent);
   const installedContent = await readInstalledSkill(skillFile);
-  const legacyInstalledContent = await readInstalledSkill(legacyPaths.skillFile);
+  const legacyInstalls = [];
+  for (const paths of legacyPaths) {
+    const installedContentForLegacy = await readInstalledSkill(paths.skillFile);
+    if (installedContentForLegacy !== null) {
+      const metadata = await readMetadata(paths.metadataFile);
+      legacyInstalls.push({
+        ...paths,
+        installedContent: installedContentForLegacy,
+        metadata,
+        userModified: detectLegacyUserModified({
+          installedContent: installedContentForLegacy,
+          metadata,
+          skillName: path.basename(paths.skillDir),
+        }),
+      });
+    }
+  }
 
-  if (installedContent === null && legacyInstalledContent === null) {
+  if (installedContent === null && legacyInstalls.length === 0) {
     return {
       ok: true,
       target: TARGET,
@@ -156,64 +180,60 @@ export async function getHermesSkillStatus({ env = process.env } = {}) {
     };
   }
 
-  const isLegacyInstall = installedContent === null;
-  const resolvedContent = isLegacyInstall ? legacyInstalledContent : installedContent;
-  const resolvedSkillFile = isLegacyInstall ? legacyPaths.skillFile : skillFile;
-  const resolvedMetadataFile = isLegacyInstall ? legacyPaths.metadataFile : metadataFile;
-  const resolvedMetadata = await readMetadata(resolvedMetadataFile);
-  const resolvedBundledSha = isLegacyInstall ? legacyBundledSha : bundledSha;
-  const installedSha = sha256(resolvedContent);
-  const userModified = detectUserModified({
-    installedContent: resolvedContent,
-    metadata: resolvedMetadata,
-    bundledSha: resolvedBundledSha,
-  });
+  const metadata = installedContent === null ? null : await readMetadata(metadataFile);
+  const installedSha = installedContent === null ? null : sha256(installedContent);
+  const userModified =
+    installedContent === null
+      ? legacyInstalls.some((entry) => entry.userModified)
+      : detectUserModified({
+          installedContent,
+          metadata,
+          bundledSha,
+        }) || legacyInstalls.some((entry) => entry.userModified);
+  const firstLegacy = legacyInstalls[0] ?? null;
 
   return {
     ok: true,
     target: TARGET,
     installed: true,
-    current: !isLegacyInstall && installedSha === bundledSha,
+    current: installedContent !== null && legacyInstalls.length === 0 && installedSha === bundledSha,
     user_modified: userModified,
-    skill_file: resolvedSkillFile,
-    metadata_file: resolvedMetadataFile,
-    installed_version: resolvedMetadata?.version ?? null,
-    installed_sha256: installedSha,
+    skill_file: installedContent === null ? firstLegacy.skillFile : skillFile,
+    metadata_file: installedContent === null ? firstLegacy.metadataFile : metadataFile,
+    installed_version: (installedContent === null ? firstLegacy.metadata : metadata)?.version ?? null,
+    installed_sha256: installedContent === null ? sha256(firstLegacy.installedContent) : installedSha,
     bundled_sha256: bundledSha,
-    skill_dir: isLegacyInstall ? legacyPaths.skillDir : skillDir,
+    skill_dir: installedContent === null ? firstLegacy.skillDir : skillDir,
     canonical_skill_file: skillFile,
-    legacy_install: isLegacyInstall,
+    legacy_install: legacyInstalls.length > 0,
   };
 }
 
 export async function syncHermesSkill({ env = process.env, force = false } = {}) {
   const { skillDir, skillFile, metadataFile } = getSkillPaths(env);
-  const legacyPaths = getLegacySkillPaths(env);
   const packageVersion = await readPackageVersion();
   const bundledContent = await fs.readFile(BUNDLED_SKILL_FILE, "utf8");
   const bundledSha = sha256(bundledContent);
-  const legacyBundledContent = await fs.readFile(LEGACY_BUNDLED_SKILL_FILE, "utf8");
-  const legacyBundledSha = sha256(legacyBundledContent);
   const installedContent = await readInstalledSkill(skillFile);
   const metadata = await readMetadata(metadataFile);
-  const legacyInstalledContent = await readInstalledSkill(legacyPaths.skillFile);
-  const legacyMetadata = await readMetadata(legacyPaths.metadataFile);
   const userModified = detectUserModified({
     installedContent,
     metadata,
     bundledSha,
   });
-  const legacyUserModified = detectUserModified({
-    installedContent: legacyInstalledContent,
-    metadata: legacyMetadata,
-    bundledSha: legacyBundledSha,
-  });
 
-  if (legacyInstalledContent !== null && legacyUserModified && !force) {
+  if (userModified && !force) {
     throw new Error(
-      "Legacy Hermes skill has local changes. Run `preqstation-dispatcher sync hermes --force` to back up and replace it.",
+      "Hermes skill has local changes. Run `preqstation sync hermes --force` to back up and replace it.",
     );
   }
+
+  const legacyBackups = [];
+  await removeLegacyInstalls({
+    env,
+    force,
+    backups: legacyBackups,
+  });
 
   if (installedContent !== null && sha256(installedContent) === bundledSha && !userModified) {
     const nextMetadata = {
@@ -231,13 +251,6 @@ export async function syncHermesSkill({ env = process.env, force = false } = {})
       content: bundledContent,
       metadata: nextMetadata,
     });
-    const backups = [];
-    await removeLegacyInstall({
-      env,
-      force,
-      bundledSha: legacyBundledSha,
-      backups,
-    });
     return {
       ok: true,
       target: TARGET,
@@ -246,17 +259,12 @@ export async function syncHermesSkill({ env = process.env, force = false } = {})
       metadata_file: metadataFile,
       version: packageVersion,
       sha256: bundledSha,
-      ...(backups.length > 0 ? { backup_files: backups } : {}),
+      ...(legacyBackups.length > 0 ? { backup_files: legacyBackups } : {}),
     };
   }
 
-  if (userModified && !force) {
-    throw new Error(
-      "Hermes skill has local changes. Run `preqstation-dispatcher sync hermes --force` to back up and replace it.",
-    );
-  }
-
   const backupFiles = [];
+  backupFiles.push(...legacyBackups);
   if (installedContent !== null && force) {
     const backupFile = `${skillFile}.bak-${backupSuffix()}`;
     await fs.copyFile(skillFile, backupFile);
@@ -278,12 +286,6 @@ export async function syncHermesSkill({ env = process.env, force = false } = {})
     content: bundledContent,
     metadata: metadataNext,
   });
-  await removeLegacyInstall({
-    env,
-    force,
-    bundledSha: legacyBundledSha,
-    backups: backupFiles,
-  });
 
   return {
     ok: true,
@@ -303,24 +305,25 @@ export async function syncHermesSkill({ env = process.env, force = false } = {})
 
 export async function uninstallHermesSkill({ env = process.env, force = false } = {}) {
   const paths = getSkillPaths(env);
-  const legacyPaths = getLegacySkillPaths(env);
   const bundledContent = await fs.readFile(BUNDLED_SKILL_FILE, "utf8");
   const bundledSha = sha256(bundledContent);
-  const legacyBundledContent = await fs.readFile(LEGACY_BUNDLED_SKILL_FILE, "utf8");
-  const legacyBundledSha = sha256(legacyBundledContent);
   const installs = [
     {
       ...paths,
       bundledSha,
       installedContent: await readInstalledSkill(paths.skillFile),
       metadata: await readMetadata(paths.metadataFile),
+      legacy: false,
     },
-    {
-      ...legacyPaths,
-      bundledSha: legacyBundledSha,
-      installedContent: await readInstalledSkill(legacyPaths.skillFile),
-      metadata: await readMetadata(legacyPaths.metadataFile),
-    },
+    ...(await Promise.all(
+      getLegacySkillPaths(env).map(async (legacyPaths) => ({
+        ...legacyPaths,
+        bundledSha: null,
+        installedContent: await readInstalledSkill(legacyPaths.skillFile),
+        metadata: await readMetadata(legacyPaths.metadataFile),
+        legacy: true,
+      })),
+    )),
   ].filter((entry) => entry.installedContent !== null);
 
   if (installs.length === 0) {
@@ -333,11 +336,17 @@ export async function uninstallHermesSkill({ env = process.env, force = false } 
   }
 
   for (const install of installs) {
-    const userModified = detectUserModified({
-      installedContent: install.installedContent,
-      metadata: install.metadata,
-      bundledSha: install.bundledSha,
-    });
+    const userModified = install.legacy
+      ? detectLegacyUserModified({
+          installedContent: install.installedContent,
+          metadata: install.metadata,
+          skillName: path.basename(install.skillDir),
+        })
+      : detectUserModified({
+          installedContent: install.installedContent,
+          metadata: install.metadata,
+          bundledSha: install.bundledSha,
+        });
     if (userModified && !force) {
       throw new Error(
         "Hermes skill has local changes. Run `preqstation uninstall hermes --force` to back up and remove it.",

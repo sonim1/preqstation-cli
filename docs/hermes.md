@@ -31,7 +31,7 @@ preqstation setup status
 
 `install` without a target opens an interactive wizard for OpenClaw, Hermes, and optional PREQ MCP runtime setup. For scripts, use `preqstation install hermes`.
 
-`install hermes` installs the bundled `preqstation_dispatch` skill to `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md`.
+`install hermes` installs the bundled `preqstation` skill to `~/.hermes/skills/preqstation/preqstation/SKILL.md`.
 
 When the npm package changes, update the local Hermes skill with:
 
@@ -106,10 +106,10 @@ When none of these are set, the dispatcher falls back to the owning user's real 
 
 Use the same channel or group delivery pattern as the OpenClaw Telegram path. PREQSTATION sends a message into the dispatch chat, and the Hermes Telegram profile reacts to the message.
 
-For Bot API based receivers, enable Bot-to-Bot Communication Mode for the Hermes bot in BotFather. In a group, send an explicit command mention so the receiver is unambiguous:
+For Bot API based receivers, enable Bot-to-Bot Communication Mode for the Hermes bot in BotFather. The receiver should treat `/preqstation dispatch` as the canonical PREQSTATION command:
 
 ```text
-/preqstation_dispatch@PreqHermesBot
+/preqstation dispatch
 task_key=PROJ-123
 objective=implement
 engine=codex
@@ -119,7 +119,7 @@ branch_name=task/proj-123-example
 Project-level insight dispatch can omit `task_key`:
 
 ```text
-/preqstation_dispatch@PreqHermesBot
+/preqstation dispatch
 project_key=PROJ
 objective=insight
 engine=codex
@@ -138,7 +138,7 @@ Use a profile instruction like this:
 ```text
 You are a PREQSTATION dispatch bridge.
 
-When a Telegram message starts with /preqstation_dispatch@PreqHermesBot, parse only these fields:
+When a Telegram message starts with /preqstation dispatch, parse only these fields:
 - project_key
 - task_key
 - objective
@@ -172,7 +172,7 @@ The dispatcher validates engines, objectives, project keys, and task keys again 
 
 The recommended projects-manager action is `Send to Hermes`. Its first implementation can reuse the existing Telegram send path:
 
-1. build the structured `/preqstation_dispatch@PreqHermesBot` message
+1. build the structured `/preqstation dispatch` message
 2. send it to the configured Telegram channel or group
 3. mark the task dispatch target as `hermes-telegram`
 4. let Hermes launch `preqstation`

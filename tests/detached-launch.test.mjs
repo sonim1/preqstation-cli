@@ -223,7 +223,7 @@ test("before_dispatch handles matched preq messages and parks task flow in waiti
   const result = await handler(
     {
       content:
-        '!/skill preqstation-dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
+        '!/preqstation dispatch plan PROJ-327 using codex branch_name="task/proj-327/browser-notification-chuga"',
       channel: "telegram",
       sessionKey: "agent:main",
     },
@@ -292,7 +292,7 @@ test("before_dispatch returns an actionable Telegram reply when dispatch fails",
 
   const result = await handler(
     {
-      content: "preqstation implement PROJ-327 using codex",
+      content: "/preqstation dispatch implement PROJ-327 using codex",
       channel: "telegram",
     },
     {

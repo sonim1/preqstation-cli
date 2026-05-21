@@ -1,11 +1,11 @@
 ---
-name: preqstation-dispatch
+name: preqstation
 description: "PREQSTATION dispatcher companion guide. Use when dispatching PREQ work into a mapped project worktree with Claude Code, Codex CLI, or Gemini CLI through OpenClaw or a Telegram host such as Hermes."
 metadata:
   { "openclaw": { "requires": { "anyBins": ["claude", "codex", "gemini"] } } }
 ---
 
-# preqstation-dispatch
+# preqstation
 
 This skill documents the dispatcher-owned PREQ flow.
 
@@ -25,23 +25,22 @@ Hermes is a dispatch host, not an engine. The engine remains one of:
 
 ## OpenClaw Trigger Examples
 
-- `/skill preqstation-dispatch plan PROJ-327 using codex`
-- `/skill preqstation-dispatch ask PROJ-328 using codex ask_hint="Acceptance criteria"`
-- `!/skill preqstation-dispatch implement PROJ-327 using claude`
-- `preqstation implement PROJ-327 with codex`
+- `/preqstation dispatch plan PROJ-327 using codex`
+- `/preqstation dispatch ask PROJ-328 using codex ask_hint="Acceptance criteria"`
+- `!/preqstation dispatch implement PROJ-327 using claude`
 
 Setup command:
 
-- `/preqsetup auto`
-- `/preqsetup import`
-- `/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>`
-- `/preqsetup status`
+- `/preqstation setup auto`
+- `/preqstation setup import`
+- `/preqstation setup set <PROJECT_KEY> <ABSOLUTE_PATH>`
+- `/preqstation setup status`
 
 Recommended OpenClaw setup:
 
-- Use `/preqsetup auto` with `PROJECT_KEY REPO_URL` lines when OpenClaw should manage project-path mappings itself.
+- Use `/preqstation setup auto` with `PROJECT_KEY REPO_URL` lines when OpenClaw should manage project-path mappings itself.
 - `auto` scans `PREQSTATION_REPO_ROOTS` when set, otherwise `~/projects`, and matches local git `origin` URLs against the provided repo URLs.
-- Use `/preqsetup import` only as a compatibility shortcut when another runtime already populated `~/.preqstation-dispatch/projects.json`.
+- Use `/preqstation setup import` only as a compatibility shortcut when another runtime already populated `~/.preqstation-dispatch/projects.json`.
 
 ## Standalone Dispatcher CLI
 
@@ -77,7 +76,7 @@ Hermes Telegram messages should lead to `preqstation`; they should not implement
 The current dispatcher resolves `project_cwd` in this order:
 
 1. explicit absolute path mentioned in a direct dispatch message
-2. OpenClaw plugin config mapping saved by `/preqsetup`
+2. OpenClaw plugin config mapping saved by `/preqstation setup`
 3. shared `~/.preqstation-dispatch/projects.json`
 4. optional legacy markdown mapping from `PREQSTATION_MEMORY_PATH` or configured `memoryPath`
 

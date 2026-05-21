@@ -21,7 +21,7 @@ const UNINSTALL_TARGET_CHOICES = [
   {
     name: "Hermes Agent",
     value: "hermes",
-    description: "Remove the bundled Hermes preqstation_dispatch skill",
+    description: "Remove the bundled Hermes preqstation skill",
   },
 ];
 

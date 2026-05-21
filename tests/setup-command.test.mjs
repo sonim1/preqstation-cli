@@ -84,7 +84,7 @@ test("setup command auto-maps projects from single-line key=url payload", async 
     channel: "telegram",
     isAuthorizedSender: true,
     commandBody:
-      "/preqsetup auto PROJ=https://github.com/sonim1/projects-manager MISS=https://github.com/sonim1/missing-repo",
+      "/preqstation setup auto PROJ=https://github.com/sonim1/projects-manager MISS=https://github.com/sonim1/missing-repo",
     args: "auto PROJ=https://github.com/sonim1/projects-manager MISS=https://github.com/sonim1/missing-repo",
     config: {},
   });
@@ -134,7 +134,7 @@ test("setup command writes project mapping into plugin config", async () => {
   const result = await handler({
     channel: "telegram",
     isAuthorizedSender: true,
-    commandBody: `preqsetup set PROJ ${repoDir}`,
+    commandBody: `/preqstation setup set PROJ ${repoDir}`,
     args: `set PROJ ${repoDir}`,
     config: {},
   });
@@ -178,12 +178,12 @@ test("setup command shows current mappings when called without args", async () =
   const result = await handler({
     channel: "telegram",
     isAuthorizedSender: true,
-    commandBody: "preqsetup",
+    commandBody: "/preqstation setup",
     args: "",
     config: {},
   });
 
-  assert.match(result.text, /Usage: \/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>/);
+  assert.match(result.text, /Usage: \/preqstation setup set <PROJECT_KEY> <ABSOLUTE_PATH>/);
   assert.match(result.text, /PROJ -> \/Users\/example\/projects\/projects-manager/);
 });
 
@@ -216,7 +216,7 @@ test("setup command rejects missing project paths before saving", async () => {
     handler({
       channel: "telegram",
       isAuthorizedSender: true,
-      commandBody: "preqsetup set PROJ /tmp/preqstation-dispatcher/does-not-exist",
+      commandBody: "/preqstation setup set PROJ /tmp/preqstation-dispatcher/does-not-exist",
       args: "set PROJ /tmp/preqstation-dispatcher/does-not-exist",
       config: {},
     }),
@@ -274,7 +274,7 @@ test("setup command imports shared PREQ mappings in one shot", async () => {
   const result = await handler({
     channel: "telegram",
     isAuthorizedSender: true,
-    commandBody: "preqsetup import",
+    commandBody: "/preqstation setup import",
     args: "import",
     config: {},
   });
@@ -334,7 +334,7 @@ test("setup command auto-maps projects by repo URL under repo roots", async () =
   const result = await handler({
     channel: "telegram",
     isAuthorizedSender: true,
-    commandBody: "preqsetup auto",
+    commandBody: "/preqstation setup auto",
     args: [
       "auto",
       "PROJ https://github.com/sonim1/projects-manager",

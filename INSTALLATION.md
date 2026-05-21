@@ -117,23 +117,23 @@ openclaw status --all
 After install, prefer the OpenClaw-native bulk setup command:
 
 ```text
-/preqsetup auto PROJ=https://github.com/example/project
+/preqstation setup auto PROJ=https://github.com/example/project
 ```
 
 Useful setup commands:
 
 ```text
-/preqsetup
-/preqsetup auto
-/preqsetup import
-/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>
-/preqsetup status
-/preqsetup unset PROJ
+/preqstation
+/preqstation setup auto
+/preqstation setup import
+/preqstation setup set <PROJECT_KEY> <ABSOLUTE_PATH>
+/preqstation setup status
+/preqstation setup unset PROJ
 ```
 
-`/preqsetup auto` scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`, matches local git `origin` URLs against provided repo URLs, and stores successful matches in OpenClaw plugin config.
+`/preqstation setup auto` scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`, matches local git `origin` URLs against provided repo URLs, and stores successful matches in OpenClaw plugin config.
 
-If another runtime already populated `~/.preqstation-dispatch/projects.json`, OpenClaw can reuse it with `/preqsetup import`.
+If another runtime already populated `~/.preqstation-dispatch/projects.json`, OpenClaw can reuse it with `/preqstation setup import`.
 
 ## Hermes Agent
 
@@ -143,7 +143,7 @@ To install only the Hermes entrypoint:
 preqstation install hermes
 ```
 
-`preqstation install hermes` copies the bundled `preqstation_dispatch` Hermes skill into `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md` and writes provenance metadata next to it. Existing legacy `preq_dispatch` installs are migrated automatically when they were previously managed by this package.
+`preqstation install hermes` copies the bundled `preqstation` Hermes skill into `~/.hermes/skills/preqstation/preqstation/SKILL.md` and writes provenance metadata next to it. Existing legacy `preqstation_dispatch` and `preq_dispatch` installs are removed automatically when they were previously managed by this package.
 
 After upgrading the npm package, sync the installed Hermes skill when needed:
 

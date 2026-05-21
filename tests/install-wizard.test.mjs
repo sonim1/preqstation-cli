@@ -45,7 +45,7 @@ test("promptInstallPlan collects host and runtime selections with Clack prompt o
     {
       label: "Hermes Agent",
       value: "hermes",
-      hint: "Install the bundled Hermes preqstation_dispatch skill",
+      hint: "Install the bundled Hermes preqstation skill",
     },
   ]);
   assert.match(multiselectCalls[1].message, /agent runtimes to set up/i);

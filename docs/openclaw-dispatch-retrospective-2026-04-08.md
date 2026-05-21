@@ -81,7 +81,7 @@ Instead of leaving it as a loose skill/docs surface, we turned it into an actual
 - `openclaw.plugin.json`
 - `index.mjs`
 - `before_dispatch` interception
-- a native OpenClaw command: `/preqsetup`
+- a native OpenClaw command: `/preqstation`
 
 This let the plugin intercept PREQ dispatch messages before the normal LLM run handled them.
 
@@ -90,7 +90,7 @@ This let the plugin intercept PREQ dispatch messages before the normal LLM run h
 The new plugin intercepts PREQ dispatch messages like:
 
 ```text
-!/skill preqstation-dispatch plan PROJ-328 using codex branch_name="task/proj-328/edit-task-isyu"
+!/preqstation dispatch plan PROJ-328 using codex branch_name="task/proj-328/edit-task-isyu"
 ```
 
 The plugin now owns:
@@ -139,13 +139,13 @@ That was the key architectural shift.
 
 Originally the OpenClaw side depended too much on ad hoc mappings or sample `MEMORY.md` content.
 
-We added `/preqsetup` so OpenClaw can own path management itself.
+We added `/preqstation setup` so OpenClaw can own path management itself.
 
 Supported setup paths now include:
 
-- `/preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>`
-- `/preqsetup import`
-- `/preqsetup auto ...`
+- `/preqstation setup set <PROJECT_KEY> <ABSOLUTE_PATH>`
+- `/preqstation setup import`
+- `/preqstation setup auto ...`
 
 ### 6. Added repo URL auto-matching
 
@@ -165,7 +165,7 @@ This made setup much closer to the Claude-side experience without making OpenCla
 At first the web UI copied a multiline setup payload like:
 
 ```text
-/preqsetup auto
+/preqstation setup auto
 PROJ https://github.com/sonim1/project-manager
 AGAL https://github.com/sonim1/aga-log
 ```
@@ -175,7 +175,7 @@ That looked clean, but Telegram/OpenClaw plugin command handling did not reliabl
 So we switched the actual copied format to a single line:
 
 ```text
-/preqsetup auto PROJ=https://github.com/sonim1/project-manager AGAL=https://github.com/sonim1/aga-log
+/preqstation setup auto PROJ=https://github.com/sonim1/project-manager AGAL=https://github.com/sonim1/aga-log
 ```
 
 The plugin now supports both:
@@ -235,19 +235,19 @@ openclaw plugins inspect preqstation-dispatcher
 ### Bulk project setup from OpenClaw
 
 ```text
-/preqsetup auto PROJ=https://github.com/sonim1/project-manager AGAL=https://github.com/sonim1/aga-log
+/preqstation setup auto PROJ=https://github.com/sonim1/project-manager AGAL=https://github.com/sonim1/aga-log
 ```
 
 Then verify:
 
 ```text
-/preqsetup status
+/preqstation setup status
 ```
 
 ### Dispatch a task
 
 ```text
-!/skill preqstation-dispatch plan PROJ-328 using codex branch_name="task/proj-328/edit-task-isyu"
+!/preqstation dispatch plan PROJ-328 using codex branch_name="task/proj-328/edit-task-isyu"
 ```
 
 ### What to inspect during debugging

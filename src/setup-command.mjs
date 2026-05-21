@@ -27,13 +27,13 @@ function formatMappings(projects) {
 
 function formatUsage(projects) {
   return [
-    "Usage: /preqsetup set <PROJECT_KEY> <ABSOLUTE_PATH>",
-    "Usage: /preqsetup auto",
+    "Usage: /preqstation setup set <PROJECT_KEY> <ABSOLUTE_PATH>",
+    "Usage: /preqstation setup auto",
     "       <PROJECT_KEY> <REPO_URL>",
     "       <PROJECT_KEY> <REPO_URL>",
-    "Usage: /preqsetup import",
-    "Usage: /preqsetup unset <PROJECT_KEY>",
-    "Usage: /preqsetup status",
+    "Usage: /preqstation setup import",
+    "Usage: /preqstation setup unset <PROJECT_KEY>",
+    "Usage: /preqstation setup status",
     "",
     formatMappings(projects),
   ].join("\n");
@@ -171,7 +171,7 @@ export function createSetupCommandHandler(api, options = {}) {
       if (entries.length === 0) {
         return {
           text: [
-            "No project repo hints were provided for /preqsetup auto.",
+            "No project repo hints were provided for /preqstation setup auto.",
             "",
             formatUsage(projects),
           ].join("\n"),
