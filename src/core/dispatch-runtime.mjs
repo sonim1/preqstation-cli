@@ -66,6 +66,7 @@ export async function dispatchPreqRun({
   const launch = await dependencies.launchDetached({
     cwd: prepared.cwd,
     engine: parsed.engine,
+    model: parsed.model,
   });
 
   return {

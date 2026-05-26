@@ -23,6 +23,7 @@ test("parses a Hermes task dispatch payload into a dispatcher request", () => {
     projectKey: "PROJ",
     objective: "implement",
     branchName: "task/proj-123-example",
+    model: null,
     askHint: null,
     insightPromptB64: null,
     rawMessage:
@@ -46,6 +47,7 @@ test("infers project key from task key when Hermes task payload omits project_ke
     projectKey: "PROJ",
     objective: "review",
     branchName: null,
+    model: null,
     askHint: null,
     insightPromptB64: null,
     rawMessage: "preqstation review PROJ-456 using codex",
@@ -69,6 +71,7 @@ test("parses a Hermes project insight payload without a task key", () => {
     projectKey: "PROJ",
     objective: "insight",
     branchName: null,
+    model: null,
     askHint: null,
     insightPromptB64: "cHJvbXB0",
     rawMessage:
@@ -93,12 +96,46 @@ test("parses a Hermes comment payload with comment id metadata", () => {
     projectKey: "PROJ",
     objective: "comment",
     branchName: null,
+    model: null,
     askHint: null,
     insightPromptB64: null,
     commentId: "comment-abc-123",
     rawMessage:
       'preqstation comment PROJ-789 using codex comment_id="comment-abc-123"',
   });
+});
+
+test("parses Hermes model overrides and includes them in raw metadata", () => {
+  const parsed = parseHermesDispatchPayload({
+    event_type: "preq.dispatch.requested",
+    dispatch: {
+      objective: "implement",
+      task_key: "proj-321",
+      engine: "codex",
+      model: "gpt-5.3-codex-spark",
+    },
+  });
+
+  assert.equal(parsed.model, "gpt-5.3-codex-spark");
+  assert.equal(
+    parsed.rawMessage,
+    'preqstation implement PROJ-321 using codex model="gpt-5.3-codex-spark"',
+  );
+});
+
+test("omits default Hermes model overrides", () => {
+  const parsed = parseHermesDispatchPayload({
+    event_type: "preq.dispatch.requested",
+    dispatch: {
+      objective: "implement",
+      task_key: "proj-321",
+      engine: "codex",
+      model: "default",
+    },
+  });
+
+  assert.equal(parsed.model, null);
+  assert.equal(parsed.rawMessage, "preqstation implement PROJ-321 using codex");
 });
 
 test("rejects comment dispatches without a comment id", () => {

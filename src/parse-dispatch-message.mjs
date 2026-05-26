@@ -54,6 +54,19 @@ function parseQaRunId(message) {
   return parseMetadataValue(message, "qa_run_id");
 }
 
+const MODEL_ID_PATTERN = /^[a-zA-Z0-9._:/@+-]+$/u;
+
+function parseModel(message) {
+  const model = parseMetadataValue(message, "model");
+  if (!model || model.toLowerCase() === "default") {
+    return null;
+  }
+  if (!MODEL_ID_PATTERN.test(model)) {
+    throw new Error(`Invalid dispatch model: ${model}`);
+  }
+  return model;
+}
+
 function parseQaTaskKeys(message) {
   const rawValue = parseMetadataValue(message, "qa_task_keys");
   if (!rawValue) {
@@ -122,6 +135,7 @@ export function parseDispatchMessage(message) {
     objective,
     branchName: parseBranchName(message),
     askHint: parseAskHint(message),
+    model: parseModel(message),
     insightPromptB64: parseInsightPromptB64(message),
     qaRunId: parseQaRunId(message),
     qaTaskKeys: parseQaTaskKeys(message),

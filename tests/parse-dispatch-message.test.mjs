@@ -15,6 +15,7 @@ test("parses telegram relay dispatch syntax", () => {
     objective: "plan",
     branchName: "task/proj-327/browser-notification-chuga",
     askHint: null,
+    model: null,
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
@@ -35,6 +36,7 @@ test("parses explicit preqstation dispatch text", () => {
     objective: "implement",
     branchName: null,
     askHint: null,
+    model: null,
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
@@ -54,6 +56,7 @@ test("parses ask objective with ask_hint metadata", () => {
     objective: "ask",
     branchName: null,
     askHint: "Summarize around acceptance criteria",
+    model: null,
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
@@ -74,6 +77,7 @@ test("parses project-level insight commands without a task key", () => {
     objective: "insight",
     branchName: null,
     askHint: null,
+    model: null,
     insightPromptB64: "cHJvbXB0LWJhc2U2NA==",
     qaRunId: null,
     qaTaskKeys: null,
@@ -94,6 +98,7 @@ test("parses project-level qa metadata without treating qa_task_keys as the prim
     objective: "qa",
     branchName: "main",
     askHint: null,
+    model: null,
     insightPromptB64: null,
     qaRunId: "run-123",
     qaTaskKeys: ["PROJ-1", "PROJ-2"],
@@ -114,6 +119,7 @@ test("parses task-level qa commands with a real task key", () => {
     objective: "qa",
     branchName: null,
     askHint: null,
+    model: null,
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
@@ -133,6 +139,7 @@ test("parses comment objective with comment_id metadata", () => {
     objective: "comment",
     branchName: null,
     askHint: null,
+    model: null,
     insightPromptB64: null,
     qaRunId: null,
     qaTaskKeys: null,
@@ -148,6 +155,22 @@ test("parses comment objective with camelCase commentId metadata", () => {
   );
 
   assert.equal(parsed.commentId, "comment-def-456");
+});
+
+test("parses model metadata", () => {
+  const parsed = parseDispatchMessage(
+    '/preqstation dispatch implement PROJ-331 using codex model="gpt-5.3-codex-spark"',
+  );
+
+  assert.equal(parsed.model, "gpt-5.3-codex-spark");
+});
+
+test("normalizes default model metadata to null", () => {
+  const parsed = parseDispatchMessage(
+    '/preqstation dispatch implement PROJ-331 using codex model=default',
+  );
+
+  assert.equal(parsed.model, null);
 });
 
 test("bare preqstation is help-only and not parsed as dispatch", () => {

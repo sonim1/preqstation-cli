@@ -6,6 +6,17 @@ function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const MODEL_ID_PATTERN = /^[a-zA-Z0-9._:/@+-]+$/u;
+
+function normalizeModel(value) {
+  const model = normalizeString(value);
+  if (!model || model.toLowerCase() === "default") return null;
+  if (!MODEL_ID_PATTERN.test(model)) {
+    throw new Error(`Invalid dispatch model: ${model}`);
+  }
+  return model;
+}
+
 function normalizeEngine(value) {
   const engine = normalizeString(value).toLowerCase();
   if (!ENGINES.has(engine)) {
@@ -56,6 +67,7 @@ function buildRawMessage({
   taskKey,
   engine,
   branchName,
+  model,
   askHint,
   insightPromptB64,
   commentId,
@@ -63,6 +75,7 @@ function buildRawMessage({
   const subject = taskKey ?? projectKey;
   const metadata = [];
   if (branchName) metadata.push(`branch_name=${quoteMetadataValue(branchName)}`);
+  if (model) metadata.push(`model=${quoteMetadataValue(model)}`);
   if (askHint) metadata.push(`ask_hint=${quoteMetadataValue(askHint)}`);
   if (insightPromptB64) {
     metadata.push(`insight_prompt_b64=${quoteMetadataValue(insightPromptB64)}`);
@@ -91,6 +104,7 @@ export function parseHermesDispatchPayload(payload) {
     : inferProjectKey(taskKey);
   const objective = normalizeObjective(dispatch.objective);
   const branchName = normalizeString(dispatch.branch_name ?? dispatch.branchName) || null;
+  const model = normalizeModel(dispatch.model);
   const askHint = normalizeString(dispatch.ask_hint ?? dispatch.askHint) || null;
   const insightPromptB64 =
     normalizeString(dispatch.insight_prompt_b64 ?? dispatch.insightPromptB64) || null;
@@ -118,6 +132,7 @@ export function parseHermesDispatchPayload(payload) {
     projectKey,
     objective,
     branchName,
+    model,
     askHint,
     insightPromptB64,
     ...(commentId ? { commentId } : {}),
@@ -127,6 +142,7 @@ export function parseHermesDispatchPayload(payload) {
       taskKey,
       engine,
       branchName,
+      model,
       askHint,
       insightPromptB64,
       commentId,

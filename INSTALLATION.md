@@ -195,6 +195,15 @@ preqstation run-message --message 'preqstation implement PROJ-327 using codex'
 preqstation run-json --payload /path/to/preq-webhook-payload.json
 ```
 
+Add optional model metadata only when overriding the engine default:
+
+```bash
+preqstation run --project-key PROJ --task-key PROJ-327 --objective implement --engine codex --model gpt-5.3-codex-spark
+preqstation run-message --message 'preqstation implement PROJ-327 using codex model="gpt-5.3-codex-spark"'
+```
+
+Omitting the model, or using `model=default`, keeps the existing default behavior and does not pass a `--model` flag to Codex, Claude, or Gemini.
+
 ## Local Development
 
 Install a local checkout into OpenClaw while working on this repository:

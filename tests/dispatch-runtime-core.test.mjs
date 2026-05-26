@@ -13,6 +13,7 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, 
     projectKey: "PROJ",
     objective: "implement",
     branchName: "task/proj-123-example",
+    model: "gpt-5.3-codex-spark",
     askHint: null,
     insightPromptB64: null,
     qaRunId: null,
@@ -101,6 +102,7 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, 
   assert.deepEqual(calls[4][1], {
     cwd: "/tmp/worktrees/PROJ/task-proj-123-example",
     engine: "codex",
+    model: "gpt-5.3-codex-spark",
   });
   assert.equal(result.projectCwd, "/tmp/project");
   assert.deepEqual(result.prepared, {

@@ -38,6 +38,32 @@ test("builds a detached Gemini launch plan with non-interactive automation flags
   assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8/);
 });
 
+test("adds model flags only when a detached model override is provided", () => {
+  const codex = buildDetachedLaunchPlan({
+    cwd: "/tmp/worktree/proj/task-proj-331-model",
+    engine: "codex",
+    model: "gpt-5.3-codex-spark",
+    platform: "darwin",
+  });
+  assert.match(codex.script, /codex exec --model 'gpt-5\.3-codex-spark' --dangerously-bypass-approvals-and-sandbox/);
+
+  const claude = buildDetachedLaunchPlan({
+    cwd: "/tmp/worktree/proj/task-proj-331-model",
+    engine: "claude-code",
+    model: "claude-sonnet-4-6",
+    platform: "darwin",
+  });
+  assert.match(claude.script, /claude --model 'claude-sonnet-4-6' --dangerously-skip-permissions/);
+
+  const gemini = buildDetachedLaunchPlan({
+    cwd: "/tmp/worktree/proj/task-proj-331-model",
+    engine: "gemini-cli",
+    model: "gemini-2.5-flash",
+    platform: "darwin",
+  });
+  assert.match(gemini.script, /gemini --model 'gemini-2.5-flash' --skip-trust/);
+});
+
 test("sanitizes detached process locale for macOS", () => {
   const env = buildDetachedProcessEnv(
     {

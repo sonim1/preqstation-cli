@@ -263,6 +263,7 @@ function parseRunFlags(options) {
       task_key: options["task-key"],
       objective: options.objective,
       engine: options.engine,
+      model: options.model,
       branch_name: options["branch-name"],
       ask_hint: options["ask-hint"],
       insight_prompt_b64: options["insight-prompt-b64"],

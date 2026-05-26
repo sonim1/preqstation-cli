@@ -157,24 +157,39 @@ function shellQuote(value) {
   return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
 }
 
-function buildEngineCommand(engine, platform = process.platform) {
+function normalizeModel(value) {
+  const model = typeof value === "string" ? value.trim() : "";
+  if (!model || model.toLowerCase() === "default") return null;
+  if (!/^[a-zA-Z0-9._:/@+-]+$/u.test(model)) {
+    throw new Error(`Invalid dispatch model: ${model}`);
+  }
+  return model;
+}
+
+function buildModelFlag(model) {
+  const normalized = normalizeModel(model);
+  return normalized ? ` --model ${shellQuote(normalized)}` : "";
+}
+
+function buildEngineCommand(engine, platform = process.platform, model = null) {
   const envPrefix = buildDetachedLocalePrefix(platform);
+  const modelFlag = buildModelFlag(model);
   switch (engine) {
     case "claude-code":
-      return `${envPrefix} claude --dangerously-skip-permissions ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} claude${modelFlag} --dangerously-skip-permissions ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "gemini-cli":
-      return `${envPrefix} GEMINI_SANDBOX=false gemini --skip-trust --yolo --allowed-mcp-server-names preqstation --extensions '' -p ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} GEMINI_SANDBOX=false gemini${modelFlag} --skip-trust --yolo --allowed-mcp-server-names preqstation --extensions '' -p ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "codex":
     default:
-      return `${envPrefix} codex exec --dangerously-bypass-approvals-and-sandbox ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} codex exec${modelFlag} --dangerously-bypass-approvals-and-sandbox ${shellQuote(BOOTSTRAP_PROMPT)}`;
   }
 }
 
-export function buildDetachedLaunchPlan({ cwd, engine, platform = process.platform }) {
+export function buildDetachedLaunchPlan({ cwd, engine, model = null, platform = process.platform }) {
   const dispatchDir = path.join(cwd, ".preqstation-dispatch");
   const logFile = path.join(dispatchDir, `${engine}.log`);
   const pidFile = path.join(dispatchDir, `${engine}.pid`);
-  const engineCommand = buildEngineCommand(engine, platform);
+  const engineCommand = buildEngineCommand(engine, platform, model);
   const script = [
     `mkdir -p ${shellQuote(".preqstation-dispatch")}`,
     `( nohup ${engineCommand} > ${shellQuote(path.relative(cwd, logFile))} 2>&1 < /dev/null & echo $! > ${shellQuote(path.relative(cwd, pidFile))} )`,
@@ -189,8 +204,8 @@ export function buildDetachedLaunchPlan({ cwd, engine, platform = process.platfo
   };
 }
 
-export async function launchDetached({ cwd, engine, env = process.env, exec = execFileSync }) {
-  const plan = buildDetachedLaunchPlan({ cwd, engine });
+export async function launchDetached({ cwd, engine, model = null, env = process.env, exec = execFileSync }) {
+  const plan = buildDetachedLaunchPlan({ cwd, engine, model });
   const detachedEnv = buildDetachedProcessEnv(env, process.platform, engine);
   assertDetachedWorkerMcpReady({
     engine,
