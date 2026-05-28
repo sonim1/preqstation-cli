@@ -181,7 +181,7 @@ function buildEngineCommand(engine, platform = process.platform, model = null) {
       return `${envPrefix} GEMINI_SANDBOX=false gemini${modelFlag} --skip-trust --yolo --allowed-mcp-server-names preqstation --extensions '' -p ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "codex":
     default:
-      return `${envPrefix} codex exec${modelFlag} --dangerously-bypass-approvals-and-sandbox ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} codex exec${modelFlag} --full-auto ${shellQuote(BOOTSTRAP_PROMPT)}`;
   }
 }
 
