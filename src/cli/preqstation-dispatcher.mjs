@@ -952,6 +952,23 @@ function canRenderProgress({ stdout, options, clackUi }) {
   );
 }
 
+function renderUpdatePlan({ stdout, options, clackUi }) {
+  if (!stdout?.isTTY || options.json === "true" || typeof clackUi?.note !== "function") {
+    return;
+  }
+
+  clackUi.note(
+    [
+      "Refresh installed request entrypoints",
+      "Update installed agent runtime support",
+      "Check agent CLI paths and MCP registrations",
+      "Refresh project mappings from PREQ MCP",
+    ].join("\n"),
+    "Update plan",
+    { output: stdout },
+  );
+}
+
 async function runProgressStep({ stdout, clackUi, title, done, enabled, task }) {
   if (!enabled) {
     return task();
@@ -1581,6 +1598,7 @@ async function handleUpdateCommand({
   stdout,
   stderr,
   env,
+  clackUi = DEFAULT_CLACK_SUMMARY_UI,
   getHermesSkillStatusFn = getHermesSkillStatus,
   syncHermesSkillFn = syncHermesSkill,
   installOpenClawPluginFn = installOpenClawPlugin,
@@ -1595,80 +1613,140 @@ async function handleUpdateCommand({
     throw new Error(`Usage: ${CLI_COMMAND_NAME} update [--force] [--json]`);
   }
 
+  renderUpdatePlan({ stdout, options, clackUi });
+  const progressEnabled = canRenderProgress({ stdout, options, clackUi });
   const results = [];
-  results.push(
-    await runSafeUpdateTarget("openclaw", () =>
-      installOpenClawPluginFn({
-        env,
-        updateOnly: true,
+
+  const entrypointResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Refreshing request entrypoints",
+    done: "Request entrypoints refreshed",
+    task: async () => [
+      await runSafeUpdateTarget("openclaw", () =>
+        installOpenClawPluginFn({
+          env,
+          updateOnly: true,
+        }),
+      ),
+      await runSafeUpdateTarget("hermes", async () => {
+        const status = await getHermesSkillStatusFn({ env });
+        if (!status.installed) {
+          return {
+            ok: true,
+            target: "hermes",
+            action: "not_installed",
+            skill_file: status.skill_file,
+            metadata_file: status.metadata_file,
+          };
+        }
+        return syncHermesSkillFn({
+          env,
+          force: options.force === "true",
+        });
       }),
-    ),
-  );
+    ],
+  });
+  results.push(...entrypointResults);
 
-  results.push(
-    await runSafeUpdateTarget("hermes", async () => {
-      const status = await getHermesSkillStatusFn({ env });
-      if (!status.installed) {
-        return {
-          ok: true,
-          target: "hermes",
-          action: "not_installed",
-          skill_file: status.skill_file,
-          metadata_file: status.metadata_file,
-        };
+  const workerSupportResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Updating agent runtime support",
+    done: "Agent runtime support updated",
+    task: async () => {
+      const entries = [];
+      for (const runtime of UPDATE_RUNTIME_TARGETS) {
+        const result = await runSafeUpdateTarget(runtime, async () => {
+          const [entry] = await installRuntimeWorkerSupportFn({
+            runtimes: [runtime],
+            env,
+            installMissing: false,
+          });
+          return entry;
+        });
+        entries.push(result);
       }
-      return syncHermesSkillFn({
-        env,
-        force: options.force === "true",
-      });
-    }),
-  );
+      return entries;
+    },
+  });
+  results.push(...workerSupportResults);
 
-  for (const runtime of UPDATE_RUNTIME_TARGETS) {
-    const result = await runSafeUpdateTarget(runtime, async () => {
-      const [entry] = await installRuntimeWorkerSupportFn({
-        runtimes: [runtime],
-        env,
-        installMissing: false,
-      });
-      return entry;
-    });
-    results.push(result);
-  }
+  const runtimeHealthResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking agent CLI paths",
+    done: "Agent CLI paths checked",
+    task: async () => {
+      const entries = [];
+      for (const runtime of UPDATE_RUNTIME_TARGETS) {
+        const result = await runSafeUpdateTarget(runtime, async () => {
+          const [entry] = await inspectRuntimeExecutableHealthFn({
+            runtimes: [runtime],
+            env,
+            launchHosts: UPDATE_HOST_TARGETS,
+          });
+          return entry;
+        });
+        entries.push(result);
+      }
+      return entries;
+    },
+  });
+  results.push(...runtimeHealthResults);
 
-  for (const runtime of UPDATE_RUNTIME_TARGETS) {
-    const result = await runSafeUpdateTarget(runtime, async () => {
-      const [entry] = await inspectRuntimeExecutableHealthFn({
-        runtimes: [runtime],
-        env,
-        launchHosts: UPDATE_HOST_TARGETS,
-      });
-      return entry;
-    });
-    results.push(result);
-  }
+  const mcpResults = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking MCP registrations",
+    done: "MCP registrations checked",
+    task: async () => {
+      const entries = [];
+      for (const runtime of UPDATE_RUNTIME_TARGETS) {
+        const result = await runSafeUpdateTarget(runtime, async () => {
+          const [entry] = await inspectRuntimeMcpServersFn({
+            runtimes: [runtime],
+            env,
+          });
+          return entry;
+        });
+        entries.push(result);
+      }
+      return entries;
+    },
+  });
+  results.push(...mcpResults);
 
-  for (const runtime of UPDATE_RUNTIME_TARGETS) {
-    const result = await runSafeUpdateTarget(runtime, async () => {
-      const [entry] = await inspectRuntimeMcpServersFn({
-        runtimes: [runtime],
+  const serverUrl = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Resolving PREQSTATION server URL",
+    done: "PREQSTATION server URL resolved",
+    task: () =>
+      resolveDefaultPreqstationServerUrlFn({
+        runtimes: UPDATE_RUNTIME_TARGETS,
         env,
-      });
-      return entry;
-    });
-    results.push(result);
-  }
-
-  const serverUrl = await resolveDefaultPreqstationServerUrlFn({
-    runtimes: UPDATE_RUNTIME_TARGETS,
-    env,
-  }).catch(() => null);
-  const setupAutoResult = await runMcpBackedSetupAuto({
-    env,
-    stderr,
-    serverUrl,
-    fetchPreqstationProjectsFn,
-    resolveDefaultPreqstationServerUrlFn,
+      }).catch(() => null),
+  });
+  const setupAutoResult = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Refreshing project mappings",
+    done: "Project mappings refreshed",
+    task: () =>
+      runMcpBackedSetupAuto({
+        env,
+        stderr,
+        serverUrl,
+        fetchPreqstationProjectsFn,
+        resolveDefaultPreqstationServerUrlFn,
+      }),
   });
 
   const payload = {
@@ -1690,6 +1768,7 @@ async function handleUpdateCommand({
       summary: formatInteractiveUpdateSummary(payload),
       completeMessage: payload.ok ? "Update complete" : "Update needs attention",
       env,
+      clackUi,
     });
   } else {
     stdout.write(`${JSON.stringify(payload)}\n`);
@@ -1858,6 +1937,7 @@ export async function runDispatcherCli({
         stdout,
         stderr,
         env,
+        clackUi,
         getHermesSkillStatusFn,
         syncHermesSkillFn,
         installOpenClawPluginFn,

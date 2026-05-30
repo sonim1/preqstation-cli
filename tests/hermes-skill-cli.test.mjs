@@ -849,3 +849,91 @@ test("update renders a friendly summary for interactive tty output", async () =>
   assert.match(rendered, /\u001B\[33mattention\u001B\[0m/);
   assert.doesNotMatch(plain, /^\{/m);
 });
+
+test("update reports an interactive plan and progress steps", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-update-progress-"));
+  const repoRoot = path.join(tempDir, "repos");
+  const projectPath = path.join(repoRoot, "projects-manager");
+  await fs.mkdir(projectPath, { recursive: true });
+  execFileSync("git", ["init"], { cwd: projectPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "git@github.com:sonim1/projects-manager.git"],
+    { cwd: projectPath, stdio: "ignore" },
+  );
+  const stdout = [];
+  const notes = [];
+  const progress = [];
+  const clackUi = {
+    note: (body, title, options) => notes.push({ body, title, output: options.output }),
+    spinner: () => ({
+      start: (message) => progress.push(["start", message]),
+      stop: (message) => progress.push(["stop", message]),
+      error: (message) => progress.push(["error", message]),
+    }),
+    box: (body, title) => stdout.push(`${title}\n${body}\n`),
+    outro: (message) => stdout.push(`${message}\n`),
+  };
+
+  const exitCode = await runDispatcherCli({
+    argv: ["update"],
+    stdout: { write: (value) => stdout.push(value), isTTY: true },
+    stderr: { write: () => {} },
+    env: {
+      PREQSTATION_PROJECTS_FILE: path.join(tempDir, "projects.json"),
+      PREQSTATION_REPO_ROOTS: repoRoot,
+    },
+    clackUi,
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: false,
+      skill_file: "/tmp/hermes/SKILL.md",
+      metadata_file: "/tmp/hermes/.preqstation-dispatcher.json",
+    }),
+    installOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "not_installed",
+    }),
+    installRuntimeWorkerSupportFn: async ({ runtimes }) => [
+      { ok: true, target: runtimes[0], action: "not_installed" },
+    ],
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) => [
+      { ok: true, target: runtimes[0], category: "runtime_executable", action: "unavailable" },
+    ],
+    inspectRuntimeMcpServersFn: async ({ runtimes }) => [
+      { ok: true, target: runtimes[0], action: "mcp_missing", mcp_url: null },
+    ],
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    fetchPreqstationProjectsFn: async () => [
+      { projectKey: "PROJ", repoUrl: "https://github.com/sonim1/projects-manager" },
+    ],
+    dispatchPreqRun: async () => {
+      throw new Error("update must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].title, "Update plan");
+  assert.equal(notes[0].output.isTTY, true);
+  assert.match(notes[0].body, /Refresh installed request entrypoints/);
+  assert.match(notes[0].body, /Update installed agent runtime support/);
+  assert.match(notes[0].body, /Refresh project mappings from PREQ MCP/);
+  assert.deepEqual(progress, [
+    ["start", "Refreshing request entrypoints"],
+    ["stop", "Request entrypoints refreshed"],
+    ["start", "Updating agent runtime support"],
+    ["stop", "Agent runtime support updated"],
+    ["start", "Checking agent CLI paths"],
+    ["stop", "Agent CLI paths checked"],
+    ["start", "Checking MCP registrations"],
+    ["stop", "MCP registrations checked"],
+    ["start", "Resolving PREQSTATION server URL"],
+    ["stop", "PREQSTATION server URL resolved"],
+    ["start", "Refreshing project mappings"],
+    ["stop", "Project mappings refreshed"],
+  ]);
+  assert.match(stdout.join(""), /Update summary/);
+});
