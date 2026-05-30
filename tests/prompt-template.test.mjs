@@ -27,6 +27,8 @@ test("renders preq dispatch prompt with task and workspace details", () => {
   assert.match(prompt, /previous agent replies/i);
   assert.match(prompt, /non-target comments only to understand conversation flow/i);
   assert.match(prompt, /do not read task comments as hidden implementation requirements or conversation context/i);
+  assert.match(prompt, /Do not create Markdown checkbox task-list syntax/i);
+  assert.match(prompt, /Preserve user-authored checkboxes/i);
 });
 
 test("renders ask-specific note rewrite guidance", () => {
