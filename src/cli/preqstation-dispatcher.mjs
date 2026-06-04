@@ -59,6 +59,10 @@ const DEFAULT_CLACK_SUMMARY_UI = {
   outro: clackOutro,
   spinner: clackSpinner,
 };
+const PROGRESS_SPINNER_OPTIONS = {
+  frames: ["-", "\\", "|", "/"],
+  delay: 120,
+};
 
 const SUMMARY_SECTION_THEMES = {
   Settings: "#9EA1AA",
@@ -641,26 +645,100 @@ function formatSummarySection(title, rows) {
   return lines.join("\n");
 }
 
+const SUMMARY_STATUS_PRIORITY = new Map([
+  ["failed", 100],
+  ["attention", 90],
+  ["unavailable", 80],
+  ["not enabled", 70],
+  ["not installed", 70],
+  ["not configured", 70],
+  ["updated", 60],
+  ["installed", 50],
+  ["current", 40],
+  ["ready", 40],
+  ["registered", 30],
+  ["configured", 30],
+  ["removed", 20],
+]);
+
+function isRuntimeTarget(target) {
+  return UPDATE_RUNTIME_TARGETS.includes(target);
+}
+
+function isMcpResult(entry) {
+  return (
+    entry.action === "mcp_installed" ||
+    entry.action === "mcp_already_configured" ||
+    entry.action === "mcp_configured" ||
+    entry.action === "mcp_missing" ||
+    entry.action === "mcp_removed" ||
+    entry.action === "mcp_not_configured"
+  );
+}
+
+function createSummaryRow(entry) {
+  return {
+    label: describeInstallResultLabel(entry),
+    status: describeInstallResultAction(entry),
+    details: describeInstallResultDetails(entry).join(", "),
+  };
+}
+
+function selectMergedRuntimeStatus(rows) {
+  return rows
+    .filter(Boolean)
+    .reduce((selected, row) => {
+      if (!selected) {
+        return row;
+      }
+      const selectedPriority = SUMMARY_STATUS_PRIORITY.get(selected.status) ?? 0;
+      const rowPriority = SUMMARY_STATUS_PRIORITY.get(row.status) ?? 0;
+      return rowPriority > selectedPriority ? row : selected;
+    }, null)?.status ?? "ready";
+}
+
+function formatMergedRuntimeDetail(prefix, row) {
+  if (!row) {
+    return null;
+  }
+  return `${prefix} ${row.status}${row.details ? ` ${row.details}` : ""}`;
+}
+
+function mergeRuntimeSummaryRows({ supportRows, executableRows, runtimeOrder }) {
+  return runtimeOrder.map((runtime) => {
+    const supportRow = supportRows.get(runtime) ?? null;
+    const executableRow = executableRows.get(runtime) ?? null;
+    return {
+      label: describeRuntimeTarget(runtime),
+      status: selectMergedRuntimeStatus([supportRow, executableRow]),
+      details: [
+        formatMergedRuntimeDetail(runtime === "claude-code" ? "plugin" : "skill", supportRow),
+        formatMergedRuntimeDetail("CLI", executableRow),
+      ]
+        .filter(Boolean)
+        .join(", "),
+    };
+  });
+}
+
 function partitionSummaryRows(entries = []) {
   const hosts = [];
   const support = [];
   const mcp = [];
+  const runtimeSupportRows = new Map();
+  const runtimeExecutableRows = new Map();
+  const runtimeOrder = [];
+
+  const trackRuntime = (target) => {
+    if (!runtimeOrder.includes(target)) {
+      runtimeOrder.push(target);
+    }
+  };
 
   for (const entry of entries) {
-    const isMcpRow =
-      entry.action === "mcp_installed" ||
-      entry.action === "mcp_already_configured" ||
-      entry.action === "mcp_configured" ||
-      entry.action === "mcp_missing" ||
-      entry.action === "mcp_removed" ||
-      entry.action === "mcp_not_configured";
-    const row = {
-      label: describeInstallResultLabel(entry),
-      status: describeInstallResultAction(entry),
-      details: describeInstallResultDetails(entry).join(", "),
-    };
+    const row = createSummaryRow(entry);
 
-    if (isMcpRow) {
+    if (isMcpResult(entry)) {
       mcp.push(row);
       continue;
     }
@@ -668,8 +746,25 @@ function partitionSummaryRows(entries = []) {
       hosts.push(row);
       continue;
     }
+    if (isRuntimeTarget(entry.target)) {
+      trackRuntime(entry.target);
+      if (entry.category === "runtime_executable") {
+        runtimeExecutableRows.set(entry.target, row);
+      } else {
+        runtimeSupportRows.set(entry.target, row);
+      }
+      continue;
+    }
     support.push(row);
   }
+
+  support.push(
+    ...mergeRuntimeSummaryRows({
+      supportRows: runtimeSupportRows,
+      executableRows: runtimeExecutableRows,
+      runtimeOrder,
+    }),
+  );
 
   return { hosts, support, mcp };
 }
@@ -974,7 +1069,7 @@ async function runProgressStep({ stdout, clackUi, title, done, enabled, task }) 
     return task();
   }
 
-  const progress = clackUi.spinner({ output: stdout });
+  const progress = clackUi.spinner({ output: stdout, ...PROGRESS_SPINNER_OPTIONS });
   progress.start(title);
   try {
     const result = await task();

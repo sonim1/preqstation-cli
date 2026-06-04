@@ -230,8 +230,8 @@ test("install renders a friendly summary for interactive tty output", async () =
   assert.match(plain, /OpenClaw\s+updated\s+0\.1\.19 -> 0\.1\.20, restart: openclaw gateway restart/);
   assert.match(plain, /Hermes Agent\s+current\s+0\.1\.20/);
   assert.match(plain, /Agent runtimes/);
-  assert.match(plain, /Claude Code\s+current\s+0\.1\.37/);
-  assert.match(plain, /Codex\s+installed\s+0\.1\.37/);
+  assert.match(plain, /Claude Code\s+current\s+plugin current 0\.1\.37/);
+  assert.match(plain, /Codex\s+installed\s+skill installed 0\.1\.37/);
   assert.match(plain, /MCP/);
   assert.match(plain, /Endpoint\s+https:\/\/preq\.example\.com\/mcp/);
   assert.match(plain, /Claude Code MCP\s+configured/);
@@ -825,14 +825,13 @@ test("update renders a friendly summary for interactive tty output", async () =>
   assert.match(plain, /OpenClaw\s+not installed/);
   assert.match(plain, /Hermes Agent\s+current\s+0\.1\.22/);
   assert.match(plain, /Agent runtimes/);
-  assert.match(plain, /Claude Code\s+unavailable\s+claude command not found/);
-  assert.match(plain, /Claude Code CLI\s+ready\s+\/Users\/kendrick\/\.local\/bin\/claude/);
-  assert.match(plain, /Codex\s+updated\s+0\.1\.37 -> 0\.1\.38/);
-  assert.match(plain, /Codex CLI\s+ready\s+\/Users\/kendrick\/\.local\/bin\/codex/);
-  assert.match(plain, /Gemini CLI\s+not enabled\s+0\.1\.38, installed globally, not enabled for Gemini CLI/);
-  assert.match(plain, /Gemini CLI\s+attention/);
+  assert.match(plain, /Claude Code\s+unavailable\s+plugin unavailable claude command not found, CLI ready \/Users\/kendrick\/\.local\/bin\/claude/);
+  assert.match(plain, /Codex\s+updated\s+skill updated 0\.1\.37 -> 0\.1\.38, CLI ready \/Users\/kendrick\/\.local\/bin\/codex/);
+  assert.match(plain, /Gemini CLI\s+attention\s+skill not enabled 0\.1\.38, installed globally, not enabled for Gemini CLI, CLI attention/);
+  assert.doesNotMatch(plain, /Claude Code CLI\s+ready/);
+  assert.doesNotMatch(plain, /Codex CLI\s+ready/);
   assert.match(plain, /\/Users\/kendrick\/\.local\/state\/fnm_multishells\/12345\/bin\/gemini/);
-  assert.match(plain, /stable path: \/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini/);
+  assert.match(plain, /stable path:[\s\S]*\/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini/);
   assert.match(plain, /OpenClaw, Hermes[\s\S]*Agent dispatches may not/);
   assert.match(plain, /MCP/);
   assert.match(plain, /Claude Code MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
@@ -864,13 +863,17 @@ test("update reports an interactive plan and progress steps", async () => {
   const stdout = [];
   const notes = [];
   const progress = [];
+  const spinnerOptions = [];
   const clackUi = {
     note: (body, title, options) => notes.push({ body, title, output: options.output }),
-    spinner: () => ({
-      start: (message) => progress.push(["start", message]),
-      stop: (message) => progress.push(["stop", message]),
-      error: (message) => progress.push(["error", message]),
-    }),
+    spinner: (options) => {
+      spinnerOptions.push(options);
+      return {
+        start: (message) => progress.push(["start", message]),
+        stop: (message) => progress.push(["stop", message]),
+        error: (message) => progress.push(["error", message]),
+      };
+    },
     box: (body, title) => stdout.push(`${title}\n${body}\n`),
     outro: (message) => stdout.push(`${message}\n`),
   };
@@ -935,5 +938,9 @@ test("update reports an interactive plan and progress steps", async () => {
     ["start", "Refreshing project mappings"],
     ["stop", "Project mappings refreshed"],
   ]);
+  assert.deepEqual(
+    spinnerOptions.map(({ frames, delay }) => ({ frames, delay })),
+    Array.from({ length: 6 }, () => ({ frames: ["-", "\\", "|", "/"], delay: 120 })),
+  );
   assert.match(stdout.join(""), /Update summary/);
 });

@@ -466,9 +466,6 @@ async function runClackTaskGroup({ title, tasks, outputStream, clackUi, env }) {
     typeof clackUi.taskLog === "function" &&
     (clackUi.taskLog !== clackTaskLog || typeof outputStream.on === "function")
   ) {
-    const useSpinner =
-      typeof clackUi.spinner === "function" &&
-      (clackUi.spinner !== clackSpinner || typeof outputStream.on === "function");
     const useSummaryBoxes =
       typeof clackUi.box === "function" &&
       (clackUi.box !== clackBox || typeof outputStream.on === "function");
@@ -482,28 +479,21 @@ async function runClackTaskGroup({ title, tasks, outputStream, clackUi, env }) {
     });
     try {
       for (const entry of tasks) {
-        const stepSpinner = useSpinner ? clackUi.spinner({ output: outputStream }) : null;
-        stepSpinner?.start(entry.title);
         let resultLabel;
         try {
-          resultLabel = await entry.task((message) => stepSpinner?.message?.(message));
+          resultLabel = await entry.task(() => {});
         } catch (error) {
-          stepSpinner?.error?.(`${entry.title} failed`);
           throw error;
         }
         const logLabel = entry.getLogLabel?.() || resultLabel;
         const summaryLabel = entry.getSummaryLabel?.() || logLabel;
         if (!logLabel && !summaryLabel) {
-          stepSpinner?.clear?.();
           continue;
         }
         const renderedLogLabel = logLabel ? colorizeStatus(logLabel, { outputStream, env }) : null;
         const renderedSummaryLabel = summaryLabel
           ? colorizeStatus(summaryLabel, { outputStream, env })
           : renderedLogLabel;
-        if (stepSpinner) {
-          stepSpinner.stop(renderedLogLabel || renderedSummaryLabel);
-        }
         if (!useSummaryBoxes && renderedLogLabel) {
           log.message(renderedLogLabel);
         }

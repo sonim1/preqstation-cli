@@ -316,23 +316,7 @@ test("runInstallWizard renders a Clack install surface for TTY output", async ()
     ["start", "Agent runtimes", true],
     ["success", "Agent runtimes complete", false],
   ]);
-  assert.deepEqual(spinnerEvents, [
-    ["create", true],
-    ["start", "Install OpenClaw"],
-    ["stop", "OpenClaw is installed"],
-    ["create", true],
-    ["start", "Install Hermes Agent"],
-    ["stop", "Hermes Agent is current"],
-    ["create", true],
-    ["start", "Install Codex worker support"],
-    ["stop", "Codex skill is installed"],
-    ["create", true],
-    ["start", "Check Codex CLI"],
-    ["stop", "Codex CLI is ready"],
-    ["create", true],
-    ["start", "Register Codex MCP"],
-    ["stop", "Codex MCP is registered https://preq.example.com/mcp"],
-  ]);
+  assert.deepEqual(spinnerEvents, []);
   assert.deepEqual(boxEvents, [
     ["OpenClaw", "installed", true, "auto", true, "x"],
     ["Hermes Agent", "current", true, "auto", true, "x"],
