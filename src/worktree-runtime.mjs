@@ -76,6 +76,42 @@ function resolveWorktreeBaseRef(projectCwd) {
   return "HEAD";
 }
 
+function shouldCheckRemoteBase(baseRef) {
+  return baseRef !== "HEAD";
+}
+
+function refContainsBase(projectCwd, baseRef, ref) {
+  if (!shouldCheckRemoteBase(baseRef)) {
+    return true;
+  }
+
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", baseRef, ref], {
+      cwd: projectCwd,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function worktreeContainsBase(projectCwd, baseRef, cwd) {
+  if (!shouldCheckRemoteBase(baseRef)) {
+    return true;
+  }
+
+  const head = git(["-C", cwd, "rev-parse", "HEAD"], projectCwd);
+  return refContainsBase(projectCwd, baseRef, head);
+}
+
+function staleWorktreeMessage(branchName, baseRef) {
+  return [
+    `Dispatch branch ${branchName} is stale relative to ${baseRef}.`,
+    `Rebase or merge ${baseRef}, remove the stale branch/worktree, or dispatch with a new branch name before creating a PR.`,
+  ].join(" ");
+}
+
 function isReusableWorktree(cwd) {
   return fs
     .access(path.join(cwd, ".git"))
@@ -167,15 +203,23 @@ export async function prepareWorktree({
   });
   const branchSlug = resolvedBranchName.replaceAll("/", "-");
   const cwd = path.join(worktreeRoot, projectKey, branchSlug);
+  const baseRef = resolveWorktreeBaseRef(projectCwd);
 
   await fs.mkdir(path.dirname(cwd), { recursive: true });
 
-  if (!(await isReusableWorktree(cwd))) {
+  if (await isReusableWorktree(cwd)) {
+    if (!worktreeContainsBase(projectCwd, baseRef, cwd)) {
+      throw new Error(staleWorktreeMessage(resolvedBranchName, baseRef));
+    }
+  } else {
     if (branchExists(projectCwd, resolvedBranchName)) {
+      if (!refContainsBase(projectCwd, baseRef, resolvedBranchName)) {
+        throw new Error(staleWorktreeMessage(resolvedBranchName, baseRef));
+      }
       git(["worktree", "add", "--detach", cwd, resolvedBranchName], projectCwd);
     } else {
       git(
-        ["worktree", "add", "-b", resolvedBranchName, cwd, resolveWorktreeBaseRef(projectCwd)],
+        ["worktree", "add", "-b", resolvedBranchName, cwd, baseRef],
         projectCwd,
       );
     }

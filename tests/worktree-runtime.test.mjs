@@ -130,6 +130,61 @@ test("creates a new worktree branch from the fetched origin main state", async (
   assert.equal(await fs.readFile(path.join(prepared.cwd, "fresh.txt"), "utf8"), "fresh\n");
 });
 
+test("rejects an existing local dispatch branch that is stale relative to origin main", async () => {
+  const { seedDir, cloneDir } = await createRemoteBackedRepo();
+  const worktreeRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
+  );
+
+  git(["checkout", "-b", "task/proj-stale-existing"], cloneDir);
+
+  await fs.writeFile(path.join(seedDir, "fresh.txt"), "fresh\n");
+  git(["add", "fresh.txt"], seedDir);
+  git(["commit", "-m", "fresh"], seedDir);
+  git(["push", "origin", "main"], seedDir);
+
+  await assert.rejects(
+    prepareWorktree({
+      projectCwd: cloneDir,
+      projectKey: "PROJ",
+      branchName: "task/proj-stale-existing",
+      worktreeRoot,
+    }),
+    /stale relative to origin\/main/,
+  );
+});
+
+test("rejects a reusable worktree that is stale relative to origin main", async () => {
+  const { seedDir, cloneDir } = await createRemoteBackedRepo();
+  const worktreeRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
+  );
+
+  const first = await prepareWorktree({
+    projectCwd: cloneDir,
+    projectKey: "PROJ",
+    branchName: "task/proj-stale-reuse",
+    worktreeRoot,
+  });
+
+  await fs.writeFile(path.join(seedDir, "fresh.txt"), "fresh\n");
+  git(["add", "fresh.txt"], seedDir);
+  git(["commit", "-m", "fresh"], seedDir);
+  git(["push", "origin", "main"], seedDir);
+
+  await assert.rejects(
+    prepareWorktree({
+      projectCwd: cloneDir,
+      projectKey: "PROJ",
+      branchName: "task/proj-stale-reuse",
+      worktreeRoot,
+    }),
+    /stale relative to origin\/main/,
+  );
+
+  assert.equal(await fs.stat(first.cwd).then((stat) => stat.isDirectory()), true);
+});
+
 test("fails with a clear error when the mapped project path does not exist", async () => {
   const worktreeRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
