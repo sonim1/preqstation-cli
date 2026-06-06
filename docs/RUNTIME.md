@@ -8,7 +8,7 @@ Detached process artifacts live inside the worktree:
 Current detached Codex launch uses:
 
 ```bash
-codex exec --full-auto "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop."
+codex --ask-for-approval never exec --sandbox danger-full-access "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop."
 ```
 
 Claude Code and Gemini CLI use the same bootstrap idea with their own binaries.
