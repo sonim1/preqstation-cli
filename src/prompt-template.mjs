@@ -82,7 +82,6 @@ export function renderPrompt({
     "14) For implement, resume, review, plan, ask, insight, and qa objectives, do not read task comments as hidden implementation requirements or conversation context unless this prompt or the lifecycle skill explicitly says to handle a comment objective.",
     "15) If ./.preqstation-prompt.txt is missing, stop instead of improvising.",
     `16) When finished, clean up the worktree with: git -C ${projectCwd} worktree remove ${cwd} --force && git -C ${projectCwd} worktree prune`,
-    '17) When completely finished: openclaw system event --text "Done: <brief summary>" --mode now',
     "",
     "Task handling bootstrap:",
     'Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop.',

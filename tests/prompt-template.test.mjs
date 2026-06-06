@@ -29,6 +29,7 @@ test("renders preq dispatch prompt with task and workspace details", () => {
   assert.match(prompt, /do not read task comments as hidden implementation requirements or conversation context/i);
   assert.match(prompt, /Do not create Markdown checkbox task-list syntax/i);
   assert.match(prompt, /Preserve user-authored checkboxes/i);
+  assert.doesNotMatch(prompt, /openclaw system event/i);
 });
 
 test("renders ask-specific note rewrite guidance", () => {
