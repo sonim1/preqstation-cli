@@ -5,11 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE_NAME = "@sonim1/preqstation";
-const SKILL_NAME = "preqstation";
-const LEGACY_SKILL_NAMES = ["preqstation_dispatch", "preq_dispatch"];
+const SKILL_NAME = "preqstation_dispatch";
+const LEGACY_SKILL_NAMES = ["preqstation", "preq_dispatch"];
 const TARGET = "hermes";
 const BUNDLED_SKILL_FILE = fileURLToPath(
-  new URL("../hermes-skills/preqstation/preqstation/SKILL.md", import.meta.url),
+  new URL("../hermes-skills/preqstation/preqstation_dispatch/SKILL.md", import.meta.url),
 );
 const PACKAGE_JSON_FILE = fileURLToPath(new URL("../package.json", import.meta.url));
 

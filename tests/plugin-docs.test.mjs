@@ -43,7 +43,7 @@ test("Hermes docs make Telegram delivery the primary integration path", async ()
   assert.match(readme, /Hermes Telegram/i);
   assert.match(readme, /webhook[\s\S]*deferred|deferred[\s\S]*webhook/i);
   assert.match(hermes, /Telegram channel/i);
-  assert.match(hermes, /\/preqstation dispatch/);
+  assert.match(hermes, /\/preqstation_dispatch/);
   assert.match(hermes, /Bot-to-Bot Communication Mode/i);
   assert.match(hermes, /Webhook.*deferred/i);
   assert.match(skill, /Telegram host such as Hermes/i);

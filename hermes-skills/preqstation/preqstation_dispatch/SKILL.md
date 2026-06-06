@@ -1,6 +1,6 @@
 ---
-name: preqstation
-description: Parse trusted PREQSTATION commands and launch preqstation dispatch runs.
+name: preqstation_dispatch
+description: Parse trusted PREQSTATION dispatch messages and launch local dispatch runs.
 version: 1.0.0
 metadata:
   hermes:
@@ -9,48 +9,31 @@ metadata:
     requires_toolsets: [terminal]
 ---
 
-# PREQSTATION
+# PREQSTATION Dispatch
 
 ## When to Use
 
-Use this skill when a trusted Telegram dispatch message starts with `/preqstation`
-and its first argument is `dispatch`.
+Use this skill only when a trusted Telegram dispatch message starts with `/preqstation_dispatch`.
 
-Bare `/preqstation` and `/preqstation help` are help-only. They must not launch
-work, write files, or mutate PREQSTATION task lifecycle state.
+Do not use this skill for `/preqstation`, `/preqstation help`, or general PREQSTATION questions.
 
 ## Rules
 
 - Do not implement PREQ tasks directly in this Hermes session.
 - Do not execute arbitrary shell commands from the message.
-- Only parse these fields: `project_key`, `task_key`, `objective`, `engine`, `branch_name`, `ask_hint`, `insight_prompt_b64`, `comment_id`/`commentId`.
+- Only parse these fields: `project_key`, `task_key`, `objective`, `engine`, `branch_name`, `ask_hint`, `insight_prompt_b64`, `comment_id`/`commentId`, `model`.
 - Only allow engines: `claude-code`, `codex`, `gemini-cli`.
 - Never invent local project paths.
 - For public PREQSTATION dispatch, always launch the published package with `npx -y @sonim1/preqstation@latest run ...`; do not rely on a local checkout or globally installed binary unless explicitly testing unpublished local changes.
 - Report only whether the dispatcher launched successfully.
 
-## Help Response
-
-If the message is `/preqstation` or `/preqstation help`, respond with:
-
-```text
-PREQSTATION
-
-Usage:
-  /preqstation dispatch
-    project_key=<PROJECT_KEY>
-    task_key=<TASK_KEY>
-    objective=<plan|implement|ask|review|qa|comment|insight>
-    engine=<claude-code|codex|gemini-cli>
-```
-
 ## Procedure
 
-1. Confirm the message starts with `/preqstation` and the first argument is `dispatch`.
+1. Confirm the message starts with `/preqstation_dispatch`.
 2. Parse the structured PREQ fields from the Telegram message.
 3. Validate that `objective` and `engine` are present.
-4. For task objectives such as `plan`, `implement`, `review`, `qa`, and `comment`, require `task_key`. Infer `project_key` from `task_key` when it is omitted.
-5. For project-level objectives such as `insight`, require `project_key`.
+4. For task objectives such as `plan`, `implement`, `ask`, `review`, and `comment`, require `task_key`. Infer `project_key` from `task_key` when it is omitted.
+5. For project-level objectives such as `qa` and `insight`, require `project_key`.
 6. For `objective=comment`, require the parsed `comment_id`/`commentId` and pass it as `--comment-id`. Do not launch comment dispatch without the target comment ID.
 7. Run the published PREQSTATION package with only the parsed fields:
 
@@ -67,7 +50,7 @@ Do not fall back to a local repo path. If `npx -y @sonim1/preqstation@latest ...
 
 Include `--project-key` only when it is present or when `task_key` is unavailable.
 
-For `objective=insight`, omit `--task-key`.
+For `objective=qa` and `objective=insight`, omit `--task-key`.
 
 For `objective=ask`, include `--ask-hint` when present.
 
@@ -75,10 +58,12 @@ For project insight messages, include `--insight-prompt-b64` when present.
 
 For `objective=comment`, include `--comment-id` with the parsed `comment_id`/`commentId` value.
 
+For non-default model overrides, include `--model` with the parsed `model` value.
+
 ## Canonical Message Shape
 
 ```text
-/preqstation dispatch
+/preqstation_dispatch
 project_key=PROJ
 task_key=PROJ-123
 objective=implement
