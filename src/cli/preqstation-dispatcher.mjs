@@ -15,6 +15,7 @@ import { runInstallWizard as defaultRunInstallWizard } from "../install-wizard.m
 import { runUninstallWizard as defaultRunUninstallWizard } from "../uninstall-wizard.mjs";
 import { parseDispatchMessage } from "../parse-dispatch-message.mjs";
 import {
+  callPreqstationMcpTool as defaultCallPreqstationMcpTool,
   fetchPreqstationProjectsFromMcp as defaultFetchPreqstationProjectsFromMcp,
 } from "../preqstation-mcp-client.mjs";
 import {
@@ -1892,6 +1893,60 @@ async function handlePlatformCommand({ command, args, stdout, env }) {
   stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+function parseMcpToolArguments(options) {
+  const rawJson = options.json;
+  if (!rawJson) {
+    return {};
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch (error) {
+    throw new Error(`Invalid --json payload: ${error.message}`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("--json payload must be a JSON object");
+  }
+
+  return parsed;
+}
+
+async function handleMcpCommand({
+  args,
+  stdout,
+  env,
+  callPreqstationMcpToolFn,
+  resolveDefaultPreqstationServerUrlFn,
+}) {
+  const { options, positional } = parseOptions(args);
+  const [subcommand, toolName] = positional;
+  if (subcommand !== "call" || !toolName) {
+    throw new Error(`Usage: ${CLI_COMMAND_NAME} mcp call <tool-name> --json '{"taskId":"PROJ-123"}'`);
+  }
+
+  const serverUrl =
+    options["server-url"] ||
+    (await resolveDefaultPreqstationServerUrlFn({
+      env,
+    }));
+  if (!serverUrl) {
+    throw new Error(
+      `PREQSTATION server URL is required. Run ${CLI_COMMAND_NAME} install or pass --server-url https://<your-domain>.`,
+    );
+  }
+
+  const result = await callPreqstationMcpToolFn({
+    serverUrl,
+    oauthPath: path.join(getDispatchHome(env), "oauth.json"),
+    toolName,
+    toolArguments: parseMcpToolArguments(options),
+    env,
+  });
+  stdout.write(`${JSON.stringify(result)}\n`);
+}
+
 function writeDispatchResult({ stdout, parsed, result }) {
   stdout.write(
     `${JSON.stringify({
@@ -1932,6 +1987,7 @@ export async function runDispatcherCli({
   uninstallRuntimeMcpServersFn = uninstallRuntimeMcpServers,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
   fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
+  callPreqstationMcpToolFn = defaultCallPreqstationMcpTool,
 }) {
   const [command, ...args] = argv;
 
@@ -2046,6 +2102,17 @@ export async function runDispatcherCli({
 
     if (command === "sync") {
       await handlePlatformCommand({ command, args, stdout, env });
+      return 0;
+    }
+
+    if (command === "mcp") {
+      await handleMcpCommand({
+        args,
+        stdout,
+        env,
+        callPreqstationMcpToolFn,
+        resolveDefaultPreqstationServerUrlFn,
+      });
       return 0;
     }
 

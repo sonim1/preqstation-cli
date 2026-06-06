@@ -349,6 +349,18 @@ export function normalizePreqstationProjects(payload) {
 }
 
 async function callListProjects({ mcpUrl, token, fetchFn }) {
+  const result = await callMcpTool({
+    mcpUrl,
+    token,
+    fetchFn,
+    toolName: "preq_list_projects",
+    toolArguments: {},
+  });
+
+  return normalizePreqstationProjects(result);
+}
+
+async function callMcpTool({ mcpUrl, token, fetchFn, toolName, toolArguments }) {
   const initialized = await postMcpRequest({
     mcpUrl,
     token,
@@ -381,7 +393,7 @@ async function callListProjects({ mcpUrl, token, fetchFn }) {
     },
   });
 
-  const projects = await postMcpRequest({
+  const result = await postMcpRequest({
     mcpUrl,
     token,
     sessionId,
@@ -391,13 +403,13 @@ async function callListProjects({ mcpUrl, token, fetchFn }) {
       id: 2,
       method: "tools/call",
       params: {
-        name: "preq_list_projects",
-        arguments: {},
+        name: toolName,
+        arguments: toolArguments,
       },
     },
   });
 
-  return normalizePreqstationProjects(extractToolJson(projects.payload?.result));
+  return extractToolJson(result.payload?.result);
 }
 
 export async function fetchPreqstationProjectsFromMcp({
@@ -447,4 +459,72 @@ export async function fetchPreqstationProjectsFromMcp({
   });
   token = resolveAccessToken({ env, oauthCache });
   return callListProjects({ mcpUrl, token, fetchFn });
+}
+
+export async function callPreqstationMcpTool({
+  serverUrl,
+  oauthPath,
+  toolName,
+  toolArguments = {},
+  env = process.env,
+  fetchFn = globalThis.fetch,
+  openUrlFn = openBrowserUrl,
+  onLoginUrl,
+} = {}) {
+  if (typeof fetchFn !== "function") {
+    throw new Error("fetch is required to connect to PREQSTATION MCP");
+  }
+  if (!normalizeString(oauthPath)) {
+    throw new Error("oauthPath is required to store PREQSTATION OAuth credentials");
+  }
+  const normalizedToolName = normalizeString(toolName);
+  if (!/^[a-zA-Z0-9_.:-]+$/u.test(normalizedToolName)) {
+    throw new Error("PREQSTATION MCP tool name is invalid");
+  }
+
+  const normalizedServerUrl = normalizePreqstationServerUrl(serverUrl);
+  const mcpUrl = buildPreqstationMcpUrl(normalizedServerUrl);
+  let oauthCache = await readOauthCache(oauthPath);
+  let token = resolveAccessToken({ env, oauthCache });
+
+  if (!token) {
+    oauthCache = await loginWithOAuth({
+      serverUrl: normalizedServerUrl,
+      oauthPath,
+      fetchFn,
+      openUrlFn,
+      onLoginUrl,
+    });
+    token = resolveAccessToken({ env, oauthCache });
+  }
+
+  try {
+    return await callMcpTool({
+      mcpUrl,
+      token,
+      fetchFn,
+      toolName: normalizedToolName,
+      toolArguments,
+    });
+  } catch (error) {
+    if (error?.status !== 401 || env?.PREQSTATION_TOKEN) {
+      throw error;
+    }
+  }
+
+  oauthCache = await loginWithOAuth({
+    serverUrl: normalizedServerUrl,
+    oauthPath,
+    fetchFn,
+    openUrlFn,
+    onLoginUrl,
+  });
+  token = resolveAccessToken({ env, oauthCache });
+  return callMcpTool({
+    mcpUrl,
+    token,
+    fetchFn,
+    toolName: normalizedToolName,
+    toolArguments,
+  });
 }

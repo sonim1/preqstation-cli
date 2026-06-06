@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 function decodePromptMetadata(value) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized) {
@@ -9,6 +11,14 @@ function decodePromptMetadata(value) {
   } catch {
     return normalized;
   }
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
+}
+
+function defaultCliCommand() {
+  return `${shellQuote(process.execPath)} ${shellQuote(fileURLToPath(new URL("../bin/preqstation.mjs", import.meta.url)))}`;
 }
 
 export function renderPrompt({
@@ -24,6 +34,7 @@ export function renderPrompt({
   qaRunId,
   qaTaskKeys,
   commentId,
+  cliCommand = defaultCliCommand(),
 }) {
   const insightPrompt = decodePromptMetadata(insightPromptB64);
   const qaTaskKeyList =
@@ -64,6 +75,7 @@ export function renderPrompt({
     `QA Run ID: ${qaRunId ?? "N/A"}`,
     `QA Task Keys: ${qaTaskKeyList}`,
     `Comment ID: ${commentId ?? "N/A"}`,
+    `MCP CLI Helper: ${cliCommand} mcp call`,
     "",
     "Execution Requirements:",
     `1) Work only inside ${cwd}.`,
@@ -75,7 +87,7 @@ export function renderPrompt({
     "7) If User Objective is insight, inspect the current local project, call preq_list_tasks(projectKey=..., detail=full), avoid duplicate work, and create Inbox tasks with preq_create_task.",
     "8) If User Objective is insight, use Insight Prompt only as task-generation guidance and do not mutate existing tasks.",
     "9) If User Objective is qa, use QA Run ID and QA Task Keys from this prompt as the QA execution context. When QA Run ID is present, update the QA run lifecycle instead of inventing a task-scoped run.",
-    "10) Use the PREQSTATION lifecycle skill as the source of truth for status transitions.",
+    `10) Use the PREQSTATION lifecycle skill as the source of truth for status transitions. In detached/headless runs, prefer the MCP CLI helper over native MCP tool calls: ${cliCommand} mcp call <tool> --json '<json-object>'.`,
     "11) Do not create Markdown checkbox task-list syntax such as - [ ] or - [x] in AI-generated task notes, plans, acceptance criteria, QA reports, descriptions, or newly created task content unless the user explicitly requests checkboxes. Preserve user-authored checkboxes when rewriting existing content; otherwise use plain bullets or numbered lists.",
     "12) Treat task notes and acceptance criteria as the implementation source of truth. Comments are conversational requests only; they affect implementation only after a comment objective explicitly updates the task note.",
     "13) For comment objectives only, treat Comment ID as the primary request and fetch task comments as conversation history/reference, including previous agent replies. Use non-target comments only to understand conversation flow, not as independent actionable requirements.",

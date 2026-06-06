@@ -105,10 +105,21 @@ function worktreeContainsBase(projectCwd, baseRef, cwd) {
   return refContainsBase(projectCwd, baseRef, head);
 }
 
+function worktreeTrackedStatus(cwd) {
+  return git(["-C", cwd, "status", "--porcelain", "--untracked-files=no"], cwd);
+}
+
 function staleWorktreeMessage(branchName, baseRef) {
   return [
     `Dispatch branch ${branchName} is stale relative to ${baseRef}.`,
     `Rebase or merge ${baseRef}, remove the stale branch/worktree, or dispatch with a new branch name before creating a PR.`,
+  ].join(" ");
+}
+
+function dirtyWorktreeMessage(cwd) {
+  return [
+    `Dispatch worktree ${cwd} has tracked local changes.`,
+    "Remove or clean the existing dispatch worktree, or dispatch with a new branch name before retrying.",
   ].join(" ");
 }
 
@@ -210,6 +221,9 @@ export async function prepareWorktree({
   if (await isReusableWorktree(cwd)) {
     if (!worktreeContainsBase(projectCwd, baseRef, cwd)) {
       throw new Error(staleWorktreeMessage(resolvedBranchName, baseRef));
+    }
+    if (worktreeTrackedStatus(cwd)) {
+      throw new Error(dirtyWorktreeMessage(cwd));
     }
   } else {
     if (branchExists(projectCwd, resolvedBranchName)) {

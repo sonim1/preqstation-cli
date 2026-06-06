@@ -4,7 +4,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { fetchPreqstationProjectsFromMcp } from "../src/preqstation-mcp-client.mjs";
+import {
+  callPreqstationMcpTool,
+  fetchPreqstationProjectsFromMcp,
+} from "../src/preqstation-mcp-client.mjs";
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -92,6 +95,65 @@ test("fetchPreqstationProjectsFromMcp calls preq_list_projects with a cached OAu
       repoUrl: "https://github.com/sonim1/projects-manager",
     },
   ]);
+  assert.equal(calls.length, 3);
+});
+
+test("callPreqstationMcpTool calls an arbitrary MCP tool with cached OAuth", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-mcp-client-call-"));
+  const oauthPath = path.join(tempDir, "oauth.json");
+  await fs.writeFile(
+    oauthPath,
+    JSON.stringify({
+      discoveryState: {
+        authorizationServerUrl: "https://preq.example.com",
+      },
+      tokens: {
+        access_token: "token-123",
+      },
+    }),
+  );
+
+  const calls = [];
+  const result = await callPreqstationMcpTool({
+    serverUrl: "https://preq.example.com",
+    oauthPath,
+    toolName: "preq_get_task",
+    toolArguments: { taskId: "PROJ-123" },
+    fetchFn: async (url, options) => {
+      calls.push({ url: String(url), options });
+      assert.equal(options.headers.Authorization, "Bearer token-123");
+
+      const request = JSON.parse(options.body);
+      if (request.method === "initialize") {
+        return jsonResponse({ jsonrpc: "2.0", id: request.id, result: {} }, {
+          headers: { "mcp-session-id": "session-123" },
+        });
+      }
+      if (request.method === "notifications/initialized") {
+        assert.equal(options.headers["Mcp-Session-Id"], "session-123");
+        return new Response("", { status: 202 });
+      }
+
+      assert.equal(request.method, "tools/call");
+      assert.equal(request.params.name, "preq_get_task");
+      assert.deepEqual(request.params.arguments, { taskId: "PROJ-123" });
+      assert.equal(options.headers["Mcp-Session-Id"], "session-123");
+      return jsonResponse({
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ task: { key: "PROJ-123" } }),
+            },
+          ],
+        },
+      });
+    },
+  });
+
+  assert.deepEqual(result, { task: { key: "PROJ-123" } });
   assert.equal(calls.length, 3);
 });
 

@@ -185,6 +185,32 @@ test("rejects a reusable worktree that is stale relative to origin main", async 
   assert.equal(await fs.stat(first.cwd).then((stat) => stat.isDirectory()), true);
 });
 
+test("rejects a reusable worktree with tracked local changes", async () => {
+  const repoDir = await createRepo();
+  const worktreeRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
+  );
+
+  const first = await prepareWorktree({
+    projectCwd: repoDir,
+    projectKey: "PROJ",
+    branchName: "task/proj-dirty-reuse",
+    worktreeRoot,
+  });
+
+  await fs.writeFile(path.join(first.cwd, "README.md"), "# changed\n");
+
+  await assert.rejects(
+    prepareWorktree({
+      projectCwd: repoDir,
+      projectKey: "PROJ",
+      branchName: "task/proj-dirty-reuse",
+      worktreeRoot,
+    }),
+    /tracked local changes/,
+  );
+});
+
 test("fails with a clear error when the mapped project path does not exist", async () => {
   const worktreeRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),

@@ -97,6 +97,7 @@ test("renders qa run metadata for project-level qa dispatches", () => {
     projectCwd: "/tmp/project",
     qaRunId: "run-123",
     qaTaskKeys: ["PROJ-1", "PROJ-2"],
+    cliCommand: "node /tmp/preqstation-cli/bin/preqstation.mjs",
   });
 
   assert.match(prompt, /User Objective: qa/);
@@ -104,6 +105,8 @@ test("renders qa run metadata for project-level qa dispatches", () => {
   assert.match(prompt, /QA Task Keys: PROJ-1, PROJ-2/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
   assert.match(prompt, /use QA Run ID and QA Task Keys from this prompt/i);
+  assert.match(prompt, /MCP CLI Helper: node \/tmp\/preqstation-cli\/bin\/preqstation\.mjs mcp call/);
+  assert.match(prompt, /prefer the MCP CLI helper over native MCP tool calls/i);
 });
 
 test("renders comment id metadata for comment dispatches", () => {

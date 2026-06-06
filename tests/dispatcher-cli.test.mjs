@@ -919,6 +919,39 @@ test("run-json uses the user's shared mapping path outside Hermes profile HOME",
   assert.equal(calls[0].sharedMappingPath, mappingPath);
 });
 
+test("mcp call invokes PREQ MCP through the shared OAuth cache", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-mcp-call-"));
+  const userHome = path.join(tempDir, "user-home");
+  const calls = [];
+  const stdout = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["mcp", "call", "preq_get_task", "--json", '{"taskId":"PROJ-123"}'],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      HOME: userHome,
+      PREQSTATION_DISPATCH_HOME: path.join(userHome, ".preqstation-dispatch"),
+    },
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    callPreqstationMcpToolFn: async (params) => {
+      calls.push(params);
+      return { task: { key: "PROJ-123" } };
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("mcp call must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].serverUrl, "https://preq.example.com");
+  assert.equal(calls[0].oauthPath, path.join(userHome, ".preqstation-dispatch", "oauth.json"));
+  assert.equal(calls[0].toolName, "preq_get_task");
+  assert.deepEqual(calls[0].toolArguments, { taskId: "PROJ-123" });
+  assert.deepEqual(JSON.parse(stdout.join("")), { task: { key: "PROJ-123" } });
+});
+
 test("run passes comment-id flag through for comment objectives", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-comment-cli-"));
   const stdout = [];
