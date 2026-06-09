@@ -19,8 +19,11 @@ test("builds a detached codex launch plan that reads the prompt file", () => {
   assert.equal(plan.command, "sh");
   assert.deepEqual(plan.logFile, "/tmp/worktree/proj/task-proj-327-browser-notification-chuga/.preqstation-dispatch/codex.log");
   assert.deepEqual(plan.pidFile, "/tmp/worktree/proj/task-proj-327-browser-notification-chuga/.preqstation-dispatch/codex.pid");
-  assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8 codex --ask-for-approval never exec --sandbox danger-full-access/);
+  assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8 codex --ask-for-approval never exec -c 'mcp_servers\.preqstation\.enabled=false' --sandbox danger-full-access/);
+  assert.match(plan.script, /-c 'mcp_servers\.preqstation\.enabled=false'/);
   assert.match(plan.script, /Read and execute instructions from \.\/\.preqstation-prompt\.txt/);
+  assert.match(plan.script, /Do not stop after preq_get_task or preq_start_task/);
+  assert.match(plan.script, /objective-specific final PREQ tool/);
   assert.doesNotMatch(plan.script, /C\.UTF-8/);
   assert.doesNotMatch(plan.script, /LC_CTYPE=UTF-8/);
   assert.doesNotMatch(plan.script, /& &&/);
@@ -45,7 +48,7 @@ test("adds model flags only when a detached model override is provided", () => {
     model: "gpt-5.3-codex-spark",
     platform: "darwin",
   });
-  assert.match(codex.script, /codex --ask-for-approval never exec --model 'gpt-5\.3-codex-spark' --sandbox danger-full-access/);
+  assert.match(codex.script, /codex --ask-for-approval never exec -c 'mcp_servers\.preqstation\.enabled=false' --model 'gpt-5\.3-codex-spark' --sandbox danger-full-access/);
 
   const claude = buildDetachedLaunchPlan({
     cwd: "/tmp/worktree/proj/task-proj-331-model",
@@ -129,7 +132,7 @@ test("keeps C.UTF-8 as the detached locale on non-macOS hosts", () => {
     platform: "linux",
   });
 
-  assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=C.UTF-8 LC_CTYPE=C.UTF-8 codex --ask-for-approval never exec --sandbox danger-full-access/);
+  assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=C.UTF-8 LC_CTYPE=C.UTF-8 codex --ask-for-approval never exec -c 'mcp_servers\.preqstation\.enabled=false' --sandbox danger-full-access/);
 });
 
 test("codex detached preflight rejects preqstation MCP sessions that are not logged in", () => {

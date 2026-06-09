@@ -18,6 +18,10 @@ test("renders preq dispatch prompt with task and workspace details", () => {
   assert.match(prompt, /Project Key: PROJ/);
   assert.match(prompt, /Branch Name: task\/proj-327\/browser-notification-chuga/);
   assert.match(prompt, /User Objective: plan/);
+  assert.match(prompt, /Objective Completion Contract/);
+  assert.match(prompt, /preq_get_task and preq_start_task are bootstrap only/i);
+  assert.match(prompt, /For User Objective plan, do not exit until preq_plan_task succeeds/i);
+  assert.match(prompt, /No additional actions were taken yet/i);
   assert.match(prompt, /Work only inside \/tmp\/worktree\/proj\/task-proj-327-browser-notification-chuga/);
   assert.match(prompt, /preq_start_task\("PROJ-327", "codex"\)/);
   assert.match(prompt, /notes and acceptance criteria as the implementation source of truth/i);
@@ -45,6 +49,7 @@ test("renders ask-specific note rewrite guidance", () => {
   });
 
   assert.match(prompt, /User Objective: ask/);
+  assert.match(prompt, /For User Objective ask, do not exit until preq_update_task_note succeeds/i);
   assert.match(prompt, /Ask Hint: Summarize around acceptance criteria/);
   assert.match(prompt, /preq_update_task_note/);
   assert.match(prompt, /preq_update_task_status/);
@@ -80,6 +85,7 @@ test("renders insight-specific task generation guidance", () => {
 
   assert.match(prompt, /Task ID: N\/A/);
   assert.match(prompt, /User Objective: insight/);
+  assert.match(prompt, /For User Objective insight, do not exit until the required preq_create_task calls are complete/i);
   assert.match(prompt, /Insight Prompt: Break down the Connections page redesign/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
   assert.match(prompt, /preq_list_tasks\(projectKey=\.\.\., detail=full\)/);
@@ -101,6 +107,7 @@ test("renders qa run metadata for project-level qa dispatches", () => {
   });
 
   assert.match(prompt, /User Objective: qa/);
+  assert.match(prompt, /For User Objective qa, do not exit until preq_update_qa_run records passed or failed/i);
   assert.match(prompt, /QA Run ID: run-123/);
   assert.match(prompt, /QA Task Keys: PROJ-1, PROJ-2/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
@@ -122,6 +129,7 @@ test("renders comment id metadata for comment dispatches", () => {
   });
 
   assert.match(prompt, /User Objective: comment/);
+  assert.match(prompt, /For User Objective comment, do not exit until preq_reply_task_comment succeeds/i);
   assert.match(prompt, /Comment ID: comment-abc-123/);
 });
 

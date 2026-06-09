@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { resolveDefaultUserHome } from "./project-mapping.mjs";
 
 const BOOTSTRAP_PROMPT =
-  "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop.";
+  "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop. Execute the full User Objective to completion before exiting. Do not stop after preq_get_task or preq_start_task; those are bootstrap only. You must call the objective-specific final PREQ tool described in the prompt before exiting.";
 const PREQSTATION_MCP_NAME = "preqstation";
 const WORKER_HOME_ENV_BY_ENGINE = {
   "claude-code": "PREQSTATION_CLAUDE_HOME",
@@ -181,7 +181,7 @@ function buildEngineCommand(engine, platform = process.platform, model = null) {
       return `${envPrefix} GEMINI_SANDBOX=false gemini${modelFlag} --skip-trust --yolo --allowed-mcp-server-names preqstation --extensions '' -p ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "codex":
     default:
-      return `${envPrefix} codex --ask-for-approval never exec${modelFlag} --sandbox danger-full-access ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} codex --ask-for-approval never exec -c ${shellQuote("mcp_servers.preqstation.enabled=false")}${modelFlag} --sandbox danger-full-access ${shellQuote(BOOTSTRAP_PROMPT)}`;
   }
 }
 

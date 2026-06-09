@@ -21,6 +21,28 @@ function defaultCliCommand() {
   return `${shellQuote(process.execPath)} ${shellQuote(fileURLToPath(new URL("../bin/preqstation.mjs", import.meta.url)))}`;
 }
 
+function objectiveCompletionContract(objective) {
+  switch (objective) {
+    case "plan":
+      return "For User Objective plan, do not exit until preq_plan_task succeeds with concrete plan markdown and acceptance criteria.";
+    case "implement":
+    case "resume":
+      return `For User Objective ${objective}, do not exit until preq_complete_task succeeds after verified work, or preq_block_task succeeds with a concrete blocker.`;
+    case "review":
+      return "For User Objective review, do not exit until preq_review_task succeeds after verification, or preq_block_task succeeds with the verification failure.";
+    case "ask":
+      return "For User Objective ask, do not exit until preq_update_task_note succeeds and preq_update_task_status clears run_state while preserving the current workflow status.";
+    case "comment":
+      return "For User Objective comment, do not exit until preq_reply_task_comment succeeds and preq_update_task_comment_state marks the target comment done, or failed with a concrete error.";
+    case "insight":
+      return "For User Objective insight, do not exit until the required preq_create_task calls are complete, or you have determined there is no non-duplicate task to create.";
+    case "qa":
+      return "For User Objective qa, do not exit until preq_update_qa_run records passed or failed with a report.";
+    default:
+      return `For User Objective ${objective || "unknown"}, do not exit until the lifecycle skill's objective-specific final PREQ tool succeeds, or a concrete failure/blocker is recorded.`;
+  }
+}
+
 export function renderPrompt({
   taskKey,
   projectKey,
@@ -63,6 +85,7 @@ export function renderPrompt({
           "- Use the same mcp_preqstation_ prefix for other PREQ tools listed by the lifecycle instructions.",
         ]
       : [];
+  const completionContract = objectiveCompletionContract(objective);
 
   return [
     `Task ID: ${taskKey ?? "N/A"}`,
@@ -76,6 +99,12 @@ export function renderPrompt({
     `QA Task Keys: ${qaTaskKeyList}`,
     `Comment ID: ${commentId ?? "N/A"}`,
     `MCP CLI Helper: ${cliCommand} mcp call`,
+    "",
+    "Objective Completion Contract:",
+    "- preq_get_task and preq_start_task are bootstrap only; they never count as completing the User Objective.",
+    `- ${completionContract}`,
+    "- In detached/headless runs, do not stop with a summary such as 'No additional actions were taken yet' or ask the user for confirmation before the final PREQ tool call.",
+    "- If native MCP tool calls fail authentication, continue with the MCP CLI helper using JSON keys exactly as documented, for example: mcp call preq_start_task --json '{\"taskId\":\"TASK-123\",\"engine\":\"codex\"}'.",
     "",
     "Execution Requirements:",
     `1) Work only inside ${cwd}.`,
