@@ -8,16 +8,32 @@ import {
 import { renderPrompt } from "../prompt-template.mjs";
 import { prepareWorktree } from "../worktree-runtime.mjs";
 import { launchDetached } from "../detached-launch.mjs";
+import {
+  PREQSTATION_INSTRUCTIONS_FILE,
+  PREQSTATION_LEGACY_PROMPT_FILE,
+} from "../instruction-files.mjs";
+
+export {
+  PREQSTATION_INSTRUCTIONS_FILE,
+  PREQSTATION_LEGACY_PROMPT_FILE,
+};
+
+export async function writeInstructionsFile({ cwd, instructions }) {
+  await Promise.all([
+    fs.writeFile(path.join(cwd, PREQSTATION_INSTRUCTIONS_FILE), instructions, "utf8"),
+    fs.writeFile(path.join(cwd, PREQSTATION_LEGACY_PROMPT_FILE), instructions, "utf8"),
+  ]);
+}
 
 export async function writePromptFile({ cwd, prompt }) {
-  await fs.writeFile(path.join(cwd, ".preqstation-prompt.txt"), prompt, "utf8");
+  await writeInstructionsFile({ cwd, instructions: prompt });
 }
 
 export const defaultDispatchDependencies = {
   resolveProjectCwd: resolveProjectCwdWithSources,
   prepareWorktree,
   renderPrompt,
-  writePromptFile,
+  writeInstructionsFile,
   launchDetached,
 };
 
@@ -47,7 +63,7 @@ export async function dispatchPreqRun({
     worktreeRoot,
   });
 
-  const prompt = dependencies.renderPrompt({
+  const instructions = dependencies.renderPrompt({
     taskKey: parsed.taskKey,
     projectKey: parsed.projectKey,
     branchName: prepared.branchName,
@@ -62,7 +78,18 @@ export async function dispatchPreqRun({
     ...(parsed.commentId ? { commentId: parsed.commentId } : {}),
   });
 
-  await dependencies.writePromptFile({ cwd: prepared.cwd, prompt });
+  const writeInstructions =
+    dependencies.writeInstructionsFile &&
+    dependencies.writeInstructionsFile !== defaultDispatchDependencies.writeInstructionsFile
+      ? dependencies.writeInstructionsFile
+      : dependencies.writePromptFile
+        ? (params) =>
+            dependencies.writePromptFile({
+              cwd: params.cwd,
+              prompt: params.instructions,
+            })
+        : dependencies.writeInstructionsFile;
+  await writeInstructions({ cwd: prepared.cwd, instructions });
   const launch = await dependencies.launchDetached({
     cwd: prepared.cwd,
     engine: parsed.engine,
@@ -72,7 +99,8 @@ export async function dispatchPreqRun({
   return {
     projectCwd,
     prepared,
-    prompt,
+    prompt: instructions,
+    instructions,
     launch,
   };
 }

@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
 
+import { PREQSTATION_INSTRUCTIONS_FILE } from "./instruction-files.mjs";
+
 function decodePromptMetadata(value) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized) {
@@ -115,16 +117,16 @@ export function renderPrompt({
     "6) Prototype-style asks may generate local artifacts. If an authenticated artifact provider is already available, attempt publication and keep private-or-skip by using authenticated workspace/share targets when possible. If share or quickshare-style temporary external links are available, create 7-day expiring reviewer links, record them with access=quickshare and expires=..., and do not create non-expiring anyone-with-the-link URLs. If the artifact is an HTML prototype or HTML mockup, generate at least one screenshot PNG and attempt to publish both the HTML source and screenshot. Pass published links or skip/local artifact results through the structured artifacts array on preq_update_task_note, preq_complete_task, or preq_update_qa_run; keep task notes/reports free of Artifacts: markdown blocks. If Ask Hint is present, treat it as optional note-rewrite guidance rather than a new workflow requirement.",
     "7) If User Objective is insight, inspect the current local project, call preq_list_tasks(projectKey=..., detail=full), avoid duplicate work, and create Inbox tasks with preq_create_task.",
     "8) If User Objective is insight, use Insight Prompt only as task-generation guidance and do not mutate existing tasks.",
-    "9) If User Objective is qa, use QA Run ID and QA Task Keys from this prompt as the QA execution context. When QA Run ID is present, update the QA run lifecycle instead of inventing a task-scoped run.",
+    "9) If User Objective is qa, use QA Run ID and QA Task Keys from these instructions as the QA execution context. When QA Run ID is present, update the QA run lifecycle instead of inventing a task-scoped run.",
     `10) Use the PREQSTATION lifecycle skill as the source of truth for status transitions. In detached/headless runs, prefer the MCP CLI helper over native MCP tool calls: ${cliCommand} mcp call <tool> --json '<json-object>'.`,
     "11) Do not create Markdown checkbox task-list syntax such as - [ ] or - [x] in AI-generated task notes, plans, acceptance criteria, QA reports, descriptions, or newly created task content unless the user explicitly requests checkboxes. Preserve user-authored checkboxes when rewriting existing content; otherwise use plain bullets or numbered lists.",
     "12) Treat task notes and acceptance criteria as the implementation source of truth. Comments are conversational requests only; they affect implementation only after a comment objective explicitly updates the task note.",
     "13) For comment objectives only, treat Comment ID as the primary request and fetch task comments as conversation history/reference, including previous agent replies. Use non-target comments only to understand conversation flow, not as independent actionable requirements.",
-    "14) For implement, resume, review, plan, ask, insight, and qa objectives, do not read task comments as hidden implementation requirements or conversation context unless this prompt or the lifecycle skill explicitly says to handle a comment objective.",
-    "15) If ./.preqstation-prompt.txt is missing, stop instead of improvising.",
+    "14) For implement, resume, review, plan, ask, insight, and qa objectives, do not read task comments as hidden implementation requirements or conversation context unless these instructions or the lifecycle skill explicitly says to handle a comment objective.",
+    `15) If ./${PREQSTATION_INSTRUCTIONS_FILE} is missing, stop instead of improvising.`,
     `16) When finished, clean up the worktree with: git -C ${projectCwd} worktree remove ${cwd} --force && git -C ${projectCwd} worktree prune`,
     "",
     "Task handling bootstrap:",
-    'Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop.',
+    `Read and execute instructions from ./${PREQSTATION_INSTRUCTIONS_FILE} in the current workspace. Treat that file as the source of truth. If that file is missing, stop.`,
   ].join("\n");
 }

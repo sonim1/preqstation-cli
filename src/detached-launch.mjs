@@ -3,9 +3,10 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 import { resolveDefaultUserHome } from "./project-mapping.mjs";
+import { PREQSTATION_INSTRUCTIONS_FILE } from "./instruction-files.mjs";
 
 const BOOTSTRAP_PROMPT =
-  "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop. Execute the full User Objective to completion before exiting. Do not stop after preq_get_task or preq_start_task; those are bootstrap only. You must call the objective-specific final PREQ tool described in the prompt before exiting.";
+  `Read and execute instructions from ./${PREQSTATION_INSTRUCTIONS_FILE} in the current workspace. Treat that file as the source of truth. If that file is missing, stop. Execute the full User Objective to completion before exiting. Do not stop after preq_get_task or preq_start_task; those are bootstrap only. You must call the objective-specific final PREQ tool described in the instructions before exiting.`;
 const PREQSTATION_MCP_NAME = "preqstation";
 const WORKER_HOME_ENV_BY_ENGINE = {
   "claude-code": "PREQSTATION_CLAUDE_HOME",

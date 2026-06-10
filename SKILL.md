@@ -14,7 +14,7 @@ The dispatcher should:
 1. parse the dispatch request
 2. resolve the project path on the local dispatcher host
 3. prepare an isolated git worktree
-4. write `.preqstation-prompt.txt`
+4. write `.preqstation-instructions.txt`
 5. launch the selected engine as a detached process
 
 Hermes is a dispatch host, not an engine. The engine remains one of:
@@ -69,7 +69,7 @@ Hermes Telegram messages should lead to `preqstation`; they should not implement
 
 1. Dispatcher only. Never implement the task inside the OpenClaw or Hermes trigger run.
 2. Worktree isolation only. Never launch in the primary checkout.
-3. Prompt via file only. Always write `.preqstation-prompt.txt` into the worktree first.
+3. Instructions via file only. Always write `.preqstation-instructions.txt` into the worktree first. During the compatibility window, also write `.preqstation-prompt.txt` with identical content for older installed skills.
 4. Detached launch only. Do not use `pty:true` / `background:true` for the coding run.
 5. If dispatch fails after the message was clearly intended for PREQ, return a clear handled failure instead of falling back to a generic LLM reply.
 6. Do not put local project paths into PREQ server payloads or Telegram messages. Local paths belong only to the dispatcher host.
@@ -85,9 +85,9 @@ The current dispatcher resolves `project_cwd` in this order:
 
 Public payloads and Telegram dispatch messages should not include absolute local paths.
 
-## Prompt Contract
+## Instruction Contract
 
-The dispatched CLI reads `./.preqstation-prompt.txt` in the worktree and should:
+The dispatched CLI reads `./.preqstation-instructions.txt` in the worktree and should:
 
 1. call `preq_get_task("<task>")` first when a task key exists
 2. call `preq_start_task("<task>", "<engine>")` before substantive work

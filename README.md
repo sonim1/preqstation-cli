@@ -34,7 +34,7 @@ The npm package is [`@sonim1/preqstation`](https://www.npmjs.com/package/@sonim1
 This repository is the durable public PREQ CLI and dispatcher surface for PreqStation. It prepares an operator host, configures request entrypoints, maps local projects, runs health checks, and can launch Claude Code, Codex, or Gemini directly or through integrations such as OpenClaw and Hermes.
 
 - `bin/preqstation.mjs` exposes the platform-neutral CLI
-- `src/core/` owns project mapping, git worktree preparation, prompt rendering, and detached engine launch
+- `src/core/` owns project mapping, git worktree preparation, instruction rendering, and detached engine launch
 - `src/adapters/openclaw/` owns the OpenClaw `before_dispatch` hook and `/preqstation`
 - `src/adapters/hermes/` owns optional Hermes payload normalization for deferred webhook experiments
 
@@ -42,7 +42,7 @@ OpenClaw still loads this package through `openclaw.plugin.json` and root `index
 
 ## What It Does
 
-The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-prompt.txt`, and launches the selected engine as a detached process, including detached Codex runs. This is intentionally not the old PTY/background session model: it does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
+The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-instructions.txt`, and launches the selected engine as a detached process, including detached Codex runs. During the compatibility window it also writes the legacy `.preqstation-prompt.txt` filename with identical content for older installed skills. This is intentionally not the old PTY/background session model: it does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
 
 Supported engines:
 

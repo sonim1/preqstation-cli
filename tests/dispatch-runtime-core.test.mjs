@@ -1,9 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
-import { dispatchPreqRun } from "../src/core/dispatch-runtime.mjs";
+import {
+  PREQSTATION_INSTRUCTIONS_FILE,
+  PREQSTATION_LEGACY_PROMPT_FILE,
+  dispatchPreqRun,
+  writeInstructionsFile,
+} from "../src/core/dispatch-runtime.mjs";
 
-test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, and launches the engine", async () => {
+test("writeInstructionsFile writes canonical and legacy instruction files", async () => {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-instructions-"));
+
+  await writeInstructionsFile({ cwd, instructions: "instruction text" });
+
+  assert.equal(
+    await fs.readFile(path.join(cwd, PREQSTATION_INSTRUCTIONS_FILE), "utf8"),
+    "instruction text",
+  );
+  assert.equal(
+    await fs.readFile(path.join(cwd, PREQSTATION_LEGACY_PROMPT_FILE), "utf8"),
+    "instruction text",
+  );
+});
+
+test("dispatchPreqRun resolves a project, prepares a worktree, writes instructions, and launches the engine", async () => {
   const calls = [];
   const parsed = {
     rawMessage:
@@ -41,10 +64,10 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, 
       },
       renderPrompt: (params) => {
         calls.push(["renderPrompt", params]);
-        return "prompt text";
+        return "instruction text";
       },
-      writePromptFile: async (params) => {
-        calls.push(["writePromptFile", params]);
+      writeInstructionsFile: async (params) => {
+        calls.push(["writeInstructionsFile", params]);
       },
       launchDetached: async (params) => {
         calls.push(["launchDetached", params]);
@@ -63,7 +86,7 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, 
       "resolveProjectCwd",
       "prepareWorktree",
       "renderPrompt",
-      "writePromptFile",
+      "writeInstructionsFile",
       "launchDetached",
     ],
   );
@@ -97,7 +120,7 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes a prompt, 
   });
   assert.deepEqual(calls[3][1], {
     cwd: "/tmp/worktrees/PROJ/task-proj-123-example",
-    prompt: "prompt text",
+    instructions: "instruction text",
   });
   assert.deepEqual(calls[4][1], {
     cwd: "/tmp/worktrees/PROJ/task-proj-123-example",

@@ -9,7 +9,7 @@ import {
 } from "../src/detached-launch.mjs";
 import { createBeforeDispatchHandler } from "../index.mjs";
 
-test("builds a detached codex launch plan that reads the prompt file", () => {
+test("builds a detached codex launch plan that reads the instructions file", () => {
   const plan = buildDetachedLaunchPlan({
     cwd: "/tmp/worktree/proj/task-proj-327-browser-notification-chuga",
     engine: "codex",
@@ -21,7 +21,8 @@ test("builds a detached codex launch plan that reads the prompt file", () => {
   assert.deepEqual(plan.pidFile, "/tmp/worktree/proj/task-proj-327-browser-notification-chuga/.preqstation-dispatch/codex.pid");
   assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8 codex --ask-for-approval never exec -c 'mcp_servers\.preqstation\.enabled=false' --sandbox danger-full-access/);
   assert.match(plan.script, /-c 'mcp_servers\.preqstation\.enabled=false'/);
-  assert.match(plan.script, /Read and execute instructions from \.\/\.preqstation-prompt\.txt/);
+  assert.match(plan.script, /Read and execute instructions from \.\/\.preqstation-instructions\.txt/);
+  assert.doesNotMatch(plan.script, /\.preqstation-prompt\.txt/);
   assert.match(plan.script, /Do not stop after preq_get_task or preq_start_task/);
   assert.match(plan.script, /objective-specific final PREQ tool/);
   assert.doesNotMatch(plan.script, /C\.UTF-8/);

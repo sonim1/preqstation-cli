@@ -33,6 +33,9 @@ test("renders preq dispatch prompt with task and workspace details", () => {
   assert.match(prompt, /do not read task comments as hidden implementation requirements or conversation context/i);
   assert.match(prompt, /Do not create Markdown checkbox task-list syntax/i);
   assert.match(prompt, /Preserve user-authored checkboxes/i);
+  assert.match(prompt, /If \.\/\.preqstation-instructions\.txt is missing, stop/i);
+  assert.match(prompt, /Read and execute instructions from \.\/\.preqstation-instructions\.txt/i);
+  assert.doesNotMatch(prompt, /\.preqstation-prompt\.txt/i);
   assert.doesNotMatch(prompt, /openclaw system event/i);
 });
 
@@ -111,7 +114,7 @@ test("renders qa run metadata for project-level qa dispatches", () => {
   assert.match(prompt, /QA Run ID: run-123/);
   assert.match(prompt, /QA Task Keys: PROJ-1, PROJ-2/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
-  assert.match(prompt, /use QA Run ID and QA Task Keys from this prompt/i);
+  assert.match(prompt, /use QA Run ID and QA Task Keys from these instructions/i);
   assert.match(prompt, /MCP CLI Helper: node \/tmp\/preqstation-cli\/bin\/preqstation\.mjs mcp call/);
   assert.match(prompt, /prefer the MCP CLI helper over native MCP tool calls/i);
 });

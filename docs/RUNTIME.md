@@ -8,10 +8,12 @@ Detached process artifacts live inside the worktree:
 Current detached Codex launch uses:
 
 ```bash
-codex --ask-for-approval never exec --sandbox danger-full-access "Read and execute instructions from ./.preqstation-prompt.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop."
+codex --ask-for-approval never exec --sandbox danger-full-access "Read and execute instructions from ./.preqstation-instructions.txt in the current workspace. Treat that file as the source of truth. If that file is missing, stop."
 ```
 
 Claude Code and Gemini CLI use the same bootstrap idea with their own binaries.
+
+During the compatibility window, dispatch also writes `.preqstation-prompt.txt` with identical content for older installed worker skills. New detached bootstrap commands read `.preqstation-instructions.txt`.
 
 ## Current Limitations
 
