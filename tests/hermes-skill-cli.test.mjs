@@ -80,6 +80,8 @@ test("install hermes copies the bundled PREQ dispatch skill with provenance", as
   assert.equal(result.action, "installed");
   assert.equal(result.skill_file, skillFile);
   assert.equal(result.metadata_file, metadataFile);
+  assert.equal(result.restart_required, true);
+  assert.equal(result.restart_command, "hermes gateway restart");
 });
 
 test("install hermes removes the old managed preqstation Hermes skill", async () => {
@@ -430,6 +432,8 @@ test("sync hermes refuses user-modified skills unless forced", async () => {
   const result = JSON.parse(stdout.join(""));
   assert.equal(forcedExitCode, 0);
   assert.equal(result.action, "updated");
+  assert.equal(result.restart_required, true);
+  assert.equal(result.restart_command, "hermes gateway restart");
   assert.match(result.backup_file, /SKILL\.md\.bak-/u);
   assert.match(await fs.readFile(skillFile, "utf8"), /name: preqstation_dispatch/);
   assert.doesNotMatch(await fs.readFile(skillFile, "utf8"), /# local note/);
@@ -751,8 +755,10 @@ test("update renders a friendly summary for interactive tty output", async () =>
     syncHermesSkillFn: async () => ({
       ok: true,
       target: "hermes",
-      action: "already_current",
+      action: "updated",
       version: "0.1.22",
+      restart_required: true,
+      restart_command: "hermes gateway restart",
     }),
     installOpenClawPluginFn: async () => ({
       ok: true,
@@ -879,7 +885,7 @@ test("update renders a friendly summary for interactive tty output", async () =>
   assert.match(plain, /MCP endpoint\s+https:\/\/preq\.example\.com\/mcp/);
   assert.match(plain, /Request entrypoints/);
   assert.match(plain, /OpenClaw\s+not installed/);
-  assert.match(plain, /Hermes Agent\s+current\s+0\.1\.22/);
+  assert.match(plain, /Hermes Agent\s+updated\s+0\.1\.22, restart: hermes gateway restart/);
   assert.match(plain, /Agent runtimes/);
   assert.match(plain, /Claude Code\s+ready\s+plugin optional optional worker skill, claude command not found, CLI ready \/Users\/kendrick\/\.local\/bin\/claude/);
   assert.match(plain, /Codex\s+ready\s+skill legacy 0\.1\.37 -> 0\.1\.38, optional worker skill, CLI ready \/Users\/kendrick\/\.local\/bin\/codex/);

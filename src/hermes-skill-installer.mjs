@@ -8,6 +8,7 @@ const PACKAGE_NAME = "@sonim1/preqstation";
 const SKILL_NAME = "preqstation_dispatch";
 const LEGACY_SKILL_NAMES = ["preqstation", "preq_dispatch"];
 const TARGET = "hermes";
+const RESTART_COMMAND = "hermes gateway restart";
 const BUNDLED_SKILL_FILE = fileURLToPath(
   new URL("../hermes-skills/preqstation/preqstation_dispatch/SKILL.md", import.meta.url),
 );
@@ -295,6 +296,8 @@ export async function syncHermesSkill({ env = process.env, force = false } = {})
     metadata_file: metadataFile,
     version: packageVersion,
     sha256: bundledSha,
+    restart_required: true,
+    restart_command: RESTART_COMMAND,
     ...(backupFiles.length === 1
       ? { backup_file: backupFiles[0] }
       : backupFiles.length > 1
