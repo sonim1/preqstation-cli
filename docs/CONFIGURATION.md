@@ -23,7 +23,7 @@ CLI auth config:
 - Server URL discovery order is env vars, CLI config, shared `oauth.json`, then legacy runtime MCP registrations
 - `preqstation auth status` reports the inspected home, dispatch home, config path, OAuth path, and auth source
 
-Detached worker launches never inherit a Hermes profile home by accident. When no worker-home override is set, the dispatcher falls back to the owning user's real home so worker MCP auth can stay separate from Telegram-host profile state.
+Detached worker launches never inherit a Hermes profile home by accident. When no worker-home override is set, the dispatcher falls back to the owning user's real home so worker CLI auth can stay separate from Telegram-host profile state.
 
 Shared mapping file shape:
 

@@ -51,21 +51,21 @@ test("promptInstallPlan collects host and runtime selections with Clack prompt o
   assert.match(multiselectCalls[1].message, /agent runtimes to set up/i);
   assert.equal(multiselectCalls[1].required, true);
   assert.deepEqual(multiselectCalls[1].options, [
-    {
-      label: "Claude Code",
-      value: "claude-code",
-      hint: "Install the PREQ Claude plugin and register the remote MCP endpoint",
-    },
-    {
-      label: "Codex",
-      value: "codex",
-      hint: "Install the PREQ worker skill and register the remote MCP endpoint",
-    },
-    {
-      label: "Gemini CLI",
-      value: "gemini-cli",
-      hint: "Install the PREQ worker skill and register the remote MCP endpoint",
-    },
+      {
+        label: "Claude Code",
+        value: "claude-code",
+        hint: "Install the PREQ Claude plugin and verify the CLI path",
+      },
+      {
+        label: "Codex",
+        value: "codex",
+        hint: "Install the PREQ worker skill and verify the CLI path",
+      },
+      {
+        label: "Gemini CLI",
+        value: "gemini-cli",
+        hint: "Install the PREQ worker skill and verify the CLI path",
+      },
   ]);
   assert.equal(multiselectCalls[0].input.isTTY, true);
   assert.equal(typeof multiselectCalls[0].output.write, "function");
@@ -93,7 +93,7 @@ test("promptInstallPlan falls back to the placeholder URL when no prior PREQ ser
   );
 });
 
-test("runInstallWizard executes selected host installs and runtime MCP setup", async () => {
+test("runInstallWizard executes selected host installs and runtime CLI setup without MCP by default", async () => {
   const calls = [];
   const output = [];
   const taskGroups = [];
@@ -164,10 +164,8 @@ test("runInstallWizard executes selected host installs and runtime MCP setup", a
     ["hermes", { PATH: process.env.PATH }, true],
     ["support", { PATH: process.env.PATH }, ["codex"]],
     ["runtime-cli", { PATH: process.env.PATH }, ["codex"], ["openclaw", "hermes"]],
-    ["mcp", { PATH: process.env.PATH }, ["codex"], "https://preq.example.com"],
     ["support", { PATH: process.env.PATH }, ["gemini-cli"]],
     ["runtime-cli", { PATH: process.env.PATH }, ["gemini-cli"], ["openclaw", "hermes"]],
-    ["mcp", { PATH: process.env.PATH }, ["gemini-cli"], "https://preq.example.com"],
   ]);
   assert.deepEqual(taskGroups, [
     [
@@ -179,10 +177,8 @@ test("runInstallWizard executes selected host installs and runtime MCP setup", a
       [
         "Install Codex worker support",
         "Check Codex CLI",
-        "Register Codex MCP",
         "Install Gemini CLI worker support",
         "Check Gemini CLI",
-        "Register Gemini CLI MCP",
       ],
     ],
   ]);
@@ -191,28 +187,27 @@ test("runInstallWizard executes selected host installs and runtime MCP setup", a
     "Hermes Agent is installed",
     "Codex skill is installed",
     "Codex CLI is ready",
-    "Codex MCP is registered https://preq.example.com/mcp",
     "Gemini CLI skill is installed",
     "Gemini CLI needs attention",
-    "Gemini CLI MCP is registered https://preq.example.com/mcp",
   ]);
   assert.deepEqual(result.install_targets, ["openclaw", "hermes"]);
   assert.deepEqual(result.runtime_engines, ["codex", "gemini-cli"]);
-  assert.equal(result.mcp_url, "https://preq.example.com/mcp");
-  assert.equal(result.results.length, 8);
-  assert.match(output.join(""), /PREQ MCP endpoint/);
-  assert.match(output.join(""), /https:\/\/preq\.example\.com\/mcp/);
+  assert.equal(result.with_mcp, false);
+  assert.equal(result.mcp_url, null);
+  assert.equal(result.results.length, 6);
+  assert.match(output.join(""), /PREQSTATION server URL/);
+  assert.match(output.join(""), /https:\/\/preq\.example\.com/);
   assert.match(output.join(""), /Request entrypoints/);
   assert.match(output.join(""), /OpenClaw\s+installed/);
   assert.match(output.join(""), /Hermes Agent\s+installed/);
   assert.match(output.join(""), /Agent runtimes/);
   assert.match(output.join(""), /Codex skill\s+installed/);
   assert.match(output.join(""), /Codex CLI\s+ready/);
-  assert.match(output.join(""), /Codex MCP\s+registered/);
+  assert.doesNotMatch(output.join(""), /Codex MCP\s+registered/);
   assert.match(output.join(""), /Gemini CLI skill\s+installed/);
   assert.match(output.join(""), /Gemini CLI\s+attention/);
   assert.match(output.join(""), /OpenClaw dispatches may not inherit/);
-  assert.match(output.join(""), /Gemini CLI MCP\s+registered/);
+  assert.doesNotMatch(output.join(""), /Gemini CLI MCP\s+registered/);
 });
 
 test("runInstallWizard renders a Clack install surface for TTY output", async () => {
@@ -307,7 +302,8 @@ test("runInstallWizard renders a Clack install surface for TTY output", async ()
   assert.equal(uiEvents[1][1], "Install plan");
   assert.match(uiEvents[1][2], /OpenClaw, Hermes Agent/);
   assert.match(uiEvents[1][2], /Codex/);
-  assert.match(uiEvents[1][2], /https:\/\/preq\.example\.com\/mcp/);
+  assert.match(uiEvents[1][2], /https:\/\/preq\.example\.com/);
+  assert.doesNotMatch(uiEvents[1][2], /\/mcp/);
   assert.match(uiEvents[1][2], /Request entrypoints/);
   assert.match(uiEvents[1][2], /Agent runtimes/);
   assert.deepEqual(taskLogEvents, [
@@ -325,7 +321,6 @@ test("runInstallWizard renders a Clack install surface for TTY output", async ()
       [
         "skill installed",
         "CLI ready",
-        "MCP registered https://preq.example.com/mcp",
       ].join("\n"),
       true,
       "auto",
@@ -525,6 +520,7 @@ test("runInstallWizard reports when an MCP runtime is already configured", async
 
   await runInstallWizard({
     env: { PATH: process.env.PATH },
+    withMcp: true,
     outputStream: { write: (value) => output.push(value) },
     promptInstallPlanFn: async () => ({
       installTargets: [],
@@ -549,7 +545,7 @@ test("runInstallWizard reports when an MCP runtime is already configured", async
   });
 
   assert.match(output.join(""), /Claude Code plugin\s+current/);
-  assert.match(output.join(""), /Claude Code MCP\s+current/);
+  assert.match(output.join(""), /Claude Code legacy MCP\s+current/);
 });
 
 test("runInstallWizard reports already current host installs without pretending they were reinstalled", async () => {

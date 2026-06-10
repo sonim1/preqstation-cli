@@ -91,7 +91,7 @@ test("status reports overall install state instead of requiring hermes", async (
     argv: ["status", "--json"],
     stdout: { write: (value) => stdout.push(value) },
     stderr: { write: () => {} },
-    env: { PREQSTATION_PROJECTS_FILE: mappingPath },
+    env: { PREQSTATION_PROJECTS_FILE: mappingPath, PREQSTATION_TOKEN: "test-token" },
     inspectOpenClawPluginFn: async () => ({
       ok: true,
       target: "openclaw",
@@ -184,7 +184,7 @@ test("status reports interactive progress while checking install state", async (
     argv: ["status"],
     stdout: { write: (value) => stdout.push(value), isTTY: true },
     stderr: { write: () => {} },
-    env: { PREQSTATION_PROJECTS_FILE: mappingPath },
+    env: { PREQSTATION_PROJECTS_FILE: mappingPath, PREQSTATION_TOKEN: "test-token" },
     clackUi,
     inspectOpenClawPluginFn: async () => ({
       ok: true,
@@ -226,14 +226,18 @@ test("status reports interactive progress while checking install state", async (
     ["stop", "PREQSTATION server URL checked"],
     ["start", "Checking project mappings"],
     ["stop", "Project mappings checked"],
+    ["start", "Checking CLI auth"],
+    ["stop", "CLI auth checked"],
+    ["start", "Checking worker CLI auth"],
+    ["stop", "Worker CLI auth checked"],
     ["start", "Checking request entrypoints"],
     ["stop", "Request entrypoints checked"],
     ["start", "Checking agent runtime support"],
     ["stop", "Agent runtime support checked"],
     ["start", "Checking agent CLI paths"],
     ["stop", "Agent CLI paths checked"],
-    ["start", "Checking MCP registrations"],
-    ["stop", "MCP registrations checked"],
+    ["start", "Checking legacy MCP registrations"],
+    ["stop", "Legacy MCP registrations checked"],
   ]);
   assert.match(stdout.join(""), /Status summary/);
 });
@@ -1014,6 +1018,37 @@ test("mcp call invokes PREQ MCP through the shared OAuth cache", async () => {
   assert.equal(calls[0].toolName, "preq_get_task");
   assert.deepEqual(calls[0].toolArguments, { taskId: "PROJ-123" });
   assert.deepEqual(JSON.parse(stdout.join("")), { task: { key: "PROJ-123" } });
+});
+
+test("mcp disable removes only the legacy runtime MCP registration", async () => {
+  const calls = [];
+  const stdout = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["mcp", "disable", "codex"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: { PATH: process.env.PATH },
+    uninstallRuntimeMcpServersFn: async ({ env, runtimes }) => {
+      calls.push(["mcp", env, runtimes]);
+      return [{ ok: true, target: "codex", action: "mcp_removed" }];
+    },
+    uninstallRuntimeWorkerSupportFn: async () => {
+      throw new Error("mcp disable must not uninstall worker support");
+    },
+    dispatchPreqRun: async () => {
+      throw new Error("mcp disable must not dispatch");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls, [["mcp", { PATH: process.env.PATH }, ["codex"]]]);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    action: "mcp_disabled",
+    runtime_engines: ["codex"],
+    results: [{ ok: true, target: "codex", action: "mcp_removed", legacy: true }],
+  });
 });
 
 test("auth status reports server URL, inspected home, and OAuth cache readiness", async () => {

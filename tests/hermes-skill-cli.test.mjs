@@ -288,9 +288,9 @@ test("install renders a friendly summary for interactive tty output", async () =
   assert.match(plain, /Agent runtimes/);
   assert.match(plain, /Claude Code\s+current\s+plugin current 0\.1\.37/);
   assert.match(plain, /Codex\s+installed\s+skill installed 0\.1\.37/);
-  assert.match(plain, /MCP/);
+  assert.match(plain, /Legacy MCP/);
   assert.match(plain, /Endpoint\s+https:\/\/preq\.example\.com\/mcp/);
-  assert.match(plain, /Claude Code MCP\s+configured/);
+  assert.match(plain, /Claude Code legacy MCP\s+configured/);
   assert.match(plain, /Project Setup/);
   assert.match(plain, /PREQ projects\s+configured\s+0 matched, 1 unmatched/);
   assert.match(plain, /Install complete/);
@@ -889,10 +889,10 @@ test("update renders a friendly summary for interactive tty output", async () =>
   assert.match(plain, /\/Users\/kendrick\/\.local\/state\/fnm_multishells\/12345\/bin\/gemini/);
   assert.match(plain, /stable path:[\s\S]*\/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini/);
   assert.match(plain, /OpenClaw, Hermes[\s\S]*Agent dispatches may not/);
-  assert.match(plain, /MCP/);
-  assert.match(plain, /Claude Code MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
-  assert.match(plain, /Codex MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: enabled, auth: OAuth/);
-  assert.match(plain, /Gemini CLI MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Disconnected/);
+  assert.match(plain, /Legacy MCP/);
+  assert.match(plain, /Claude Code legacy MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
+  assert.match(plain, /Codex legacy MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: enabled, auth: OAuth/);
+  assert.match(plain, /Gemini CLI legacy MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Disconnected/);
   assert.match(plain, /Project Setup/);
   assert.match(plain, /PREQ projects\s+configured\s+1 matched, 1 unmatched/);
   assert.match(plain, /Matched Projects/);
@@ -987,8 +987,8 @@ test("update reports an interactive plan and progress steps", async () => {
     ["stop", "Agent runtime support updated"],
     ["start", "Checking agent CLI paths"],
     ["stop", "Agent CLI paths checked"],
-    ["start", "Checking MCP registrations"],
-    ["stop", "MCP registrations checked"],
+    ["start", "Checking legacy MCP registrations"],
+    ["stop", "Legacy MCP registrations checked"],
     ["start", "Resolving PREQSTATION server URL"],
     ["stop", "PREQSTATION server URL resolved"],
     ["start", "Refreshing project mappings"],

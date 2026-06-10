@@ -61,14 +61,15 @@ npx -y @sonim1/preqstation@latest install
 npx -y @sonim1/preqstation@latest status
 ```
 
-`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, remote MCP registration, and MCP-backed project setup. See [INSTALLATION.md](INSTALLATION.md) for detailed install, update, uninstall, project setup, and local development flows.
+`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, CLI server URL config, and project setup. Native PREQ runtime MCP registration is now a legacy opt-in via `preqstation install --with-mcp`. See [INSTALLATION.md](INSTALLATION.md) for detailed install, update, uninstall, project setup, and local development flows.
 
 ### Command Reference
 
 | Command | Description |
 | --- | --- |
-| `preqstation install` | Interactive setup for entrypoints, agent runtimes, MCP registration, and project mappings. |
-| `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, MCP, and project mappings. |
+| `preqstation install` | Interactive setup for entrypoints, agent runtimes, CLI config, and project mappings. |
+| `preqstation install --with-mcp` | Legacy opt-in for native PREQ runtime MCP registration. |
+| `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, CLI auth, legacy MCP, and project mappings. |
 | `preqstation doctor` | Read-only health check for dispatcher configuration and runtime availability. |
 | `preqstation auth login` | Store the PREQSTATION server URL and create the shared OAuth cache. |
 | `preqstation auth status` | Read-only CLI auth readiness check, including the inspected home and OAuth path. |
@@ -76,6 +77,7 @@ npx -y @sonim1/preqstation@latest status
 | `preqstation comment reply --comment-id ID --body-file reply.md` | Reply to task comments without native MCP tool calls. |
 | `preqstation project settings --project PROJ` | Read deployment/project settings through the CLI JSON contract. |
 | `preqstation setup auto` | Discover local projects and save shared PREQ project mappings. |
+| `preqstation mcp disable codex` | Remove only a legacy PREQ MCP registration for a runtime. |
 | `preqstation run` | Dispatch a PREQ task or project objective directly from the CLI. |
 | `preqstation uninstall` | Remove installed entrypoints, runtime support, or project mappings. |
 

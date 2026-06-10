@@ -21,4 +21,4 @@ Most users should install through the PREQSTATION CLI:
 npx -y @sonim1/preqstation@latest install
 ```
 
-The installer configures request entrypoints, worker runtime support, MCP registrations, and local project mappings. See [INSTALLATION.md](INSTALLATION.md) for direct OpenClaw/Hermes install commands, local development links, and troubleshooting notes.
+The installer configures request entrypoints, worker runtime support, CLI server config, and local project mappings. Native PREQ runtime MCP registration is legacy opt-in. See [INSTALLATION.md](INSTALLATION.md) for direct OpenClaw/Hermes install commands, local development links, and troubleshooting notes.

@@ -6,7 +6,7 @@ Scope:
 - interactive `preqstation install`
 - direct host install commands such as `install openclaw` and `install hermes`
 - runtime worker support setup for `claude-code`, `codex`, and `gemini-cli`
-- remote PREQ MCP registration
+- optional legacy PREQ MCP registration with `--with-mcp`
 
 Primary code paths:
 - [src/install-wizard.mjs](../src/install-wizard.mjs)
@@ -66,7 +66,7 @@ The default value is resolved in this order:
 1. `PREQSTATION_SERVER_URL`
 2. `PREQSTATION_API_URL`
 3. `~/.preqstation-dispatch/oauth.json`
-4. existing runtime MCP registrations
+4. legacy existing runtime MCP registrations
 5. fallback placeholder
 
 Normalization rules:
@@ -74,7 +74,7 @@ Normalization rules:
 - remove trailing slash
 - require `https://`, except `http://localhost` for local development
 
-The derived MCP endpoint is:
+When `--with-mcp` is used, the derived legacy MCP endpoint is:
 
 ```text
 <server-url>/mcp
@@ -84,10 +84,11 @@ The derived MCP endpoint is:
 
 During interactive install the wizard prints sections in this order:
 
-1. `PREQ MCP endpoint`
+1. `PREQSTATION server URL`
 2. `Request entrypoints`
 3. `Agent runtimes`
-4. final `Install summary`
+4. optional `Legacy PREQ MCP endpoint` when `--with-mcp` is used
+5. final `Install summary`
 
 ## 5. Request entrypoint installation
 
@@ -135,7 +136,7 @@ This post-check is important because OpenClaw can report a successful update com
 
 ## 6. Runtime worker support setup
 
-Each selected runtime is processed in sequence before MCP setup for that runtime.
+Each selected runtime is processed in sequence. Legacy MCP registration is skipped unless `--with-mcp` is used.
 
 ### Claude Code
 
@@ -253,9 +254,9 @@ without creating or enabling the runtime-specific skill copy.
 
 The dispatcher therefore does not trust the CLI success message alone. It uses a post-check and, if necessary, synchronizes the runtime-specific skill directory itself.
 
-## 8. Runtime MCP registration
+## 8. Legacy runtime MCP registration
 
-After runtime worker support is processed, the dispatcher registers the PREQ MCP endpoint for that runtime.
+After runtime worker support is processed, the dispatcher registers the PREQ MCP endpoint for that runtime only when `preqstation install --with-mcp` was requested.
 
 ### Claude Code
 
@@ -275,20 +276,22 @@ codex mcp add preqstation --url <mcp-url>
 gemini mcp add --scope user --transport http preqstation <mcp-url>
 ```
 
-Before registering, the dispatcher inspects the existing runtime MCP configuration. If the runtime already points at the requested PREQ MCP URL, it reports the runtime MCP as current/configured instead of re-registering it.
+Before registering, the dispatcher inspects the existing runtime MCP configuration. If the runtime already points at the requested PREQ MCP URL, it reports the runtime legacy MCP as current/configured instead of re-registering it.
 
 ## 9. Intermediate runtime output
 
-For each runtime, the wizard prints two rows:
+For each runtime, the wizard prints two default rows:
 
 - skill/plugin row
-- MCP row
+- CLI executable row
+
+When `--with-mcp` is used, it also prints a legacy MCP row.
 
 Examples:
 - `Claude Code plugin   current`
 - `Codex skill          installed`
 - `Gemini CLI skill     failed`
-- `Codex MCP            current`
+- `Codex legacy MCP     current`
 
 ## 10. Final summary generation
 
@@ -303,9 +306,9 @@ The final summary is partitioned into separate Clack boxes:
 - Codex
 - Gemini CLI
 
-### MCP
+### Legacy MCP
 - endpoint
-- per-runtime MCP status
+- per-runtime legacy MCP status
 - connection/auth details when available
 
 The CLI summary includes:
@@ -322,7 +325,7 @@ The interactive install result is considered successful only when:
 results.every((entry) => entry?.ok !== false)
 ```
 
-That means any host/runtime/MCP result with `ok: false` causes:
+That means any host/runtime/legacy MCP result with `ok: false` causes:
 - final `ok: false`
 - non-zero CLI exit code
 
@@ -339,8 +342,8 @@ Examples of real failure conditions:
 - runtime still does not appear enabled
 - fallback sync cannot produce a usable runtime-specific skill installation
 
-### MCP
-- runtime-specific MCP registration command fails
+### Legacy MCP
+- runtime-specific legacy MCP registration command fails
 - or existing MCP inspection fails unexpectedly
 
 ## 13. Filesystem locations touched
@@ -389,11 +392,11 @@ Interactive install currently behaves like this:
 1. ask which hosts to install
 2. ask which runtimes to set up
 3. resolve a default PREQSTATION server URL
-4. derive the PREQ MCP endpoint
+4. derive the legacy PREQ MCP endpoint when `--with-mcp` is used
 5. install/sync selected hosts
 6. install/update selected runtime worker support
 7. verify runtime support really stuck
-8. register runtime MCP endpoints
+8. register runtime MCP endpoints only when `--with-mcp` is used
 9. run MCP-backed `setup auto`, opening browser OAuth when needed, to map PREQ projects to local git checkouts
 10. print summary
 11. exit non-zero if any post-check failed
@@ -402,7 +405,7 @@ Interactive install currently behaves like this:
 
 1. refresh installed OpenClaw/Hermes entrypoints
 2. update installed runtime worker support without installing missing targets
-3. inspect runtime CLI and MCP health
+3. inspect runtime CLI and legacy MCP health
 4. run MCP-backed `setup auto`
 5. print the grouped update summary, including `Project Setup`
 
@@ -411,7 +414,7 @@ Interactive uninstall is the matching cleanup flow:
 1. ask which hosts to uninstall
 2. ask which runtimes to remove
 3. remove selected OpenClaw/Hermes entrypoints
-4. remove selected runtime MCP registrations
+4. remove selected legacy runtime MCP registrations
 5. remove selected runtime worker support
 6. keep project mappings and OAuth cache data
 7. print summary

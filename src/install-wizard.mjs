@@ -41,17 +41,17 @@ const RUNTIME_CHOICES = [
   {
     name: "Claude Code",
     value: "claude-code",
-    description: "Install the PREQ Claude plugin and register the remote MCP endpoint",
+    description: "Install the PREQ Claude plugin and verify the CLI path",
   },
   {
     name: "Codex",
     value: "codex",
-    description: "Install the PREQ worker skill and register the remote MCP endpoint",
+    description: "Install the PREQ worker skill and verify the CLI path",
   },
   {
     name: "Gemini CLI",
     value: "gemini-cli",
-    description: "Install the PREQ worker skill and register the remote MCP endpoint",
+    description: "Install the PREQ worker skill and verify the CLI path",
   },
 ];
 
@@ -360,7 +360,7 @@ function formatRuntimeTaskResult({ runtime, kind, result, mcpUrl }) {
     return joinProgressTaskLabel(describeRuntimeCli(runtime), describeRuntimeSupportAction(result?.action, runtime));
   }
   return joinProgressTaskLabel(
-    `${describeRuntime(runtime)} MCP`,
+    `${describeRuntime(runtime)} legacy MCP`,
     result?.action === "mcp_already_configured" ? "current" : "registered",
     [result?.mcp_url || mcpUrl],
   );
@@ -378,7 +378,7 @@ function formatRuntimeSummaryTaskResult({ runtime, kind, result, mcpUrl }) {
     return joinTaskLabel("CLI", describeRuntimeSupportAction(result?.action, runtime));
   }
   return joinTaskLabel(
-    "MCP",
+    "legacy MCP",
     result?.action === "mcp_already_configured" ? "current" : "registered",
     [result?.mcp_url || mcpUrl],
   );
@@ -411,7 +411,8 @@ function createInstallPlanNote(plan, { outputStream, env }) {
       outputStream,
       env,
     })}`,
-    ...(plan.mcpUrl ? [`PREQ MCP endpoint\n${plan.mcpUrl}`] : []),
+    ...(plan.preqstationServerUrl ? [`PREQSTATION server URL\n${plan.preqstationServerUrl}`] : []),
+    ...(plan.withMcp && plan.mcpUrl ? [`Legacy PREQ MCP endpoint\n${plan.mcpUrl}`] : []),
   ].join("\n\n");
 }
 
@@ -620,6 +621,7 @@ export async function runInstallWizard({
   outputStream = process.stdout,
   env = process.env,
   force = false,
+  withMcp = false,
   promptInstallPlanFn = promptInstallPlan,
   syncHermesSkillFn = syncHermesSkill,
   installOpenClawPluginFn = installOpenClawPlugin,
@@ -631,19 +633,27 @@ export async function runInstallWizard({
 } = {}) {
   renderInstallIntro({ outputStream, clackUi });
 
-  const plan = await promptInstallPlanFn({
+  const promptPlan = await promptInstallPlanFn({
     inputStream,
     outputStream,
     env,
   });
+  const plan = {
+    ...promptPlan,
+    withMcp: Boolean(promptPlan?.withMcp ?? withMcp),
+  };
   const results = [];
   const writePlainProgress = !shouldRenderClack(outputStream);
 
   renderInstallPlan({ plan, outputStream, clackUi, env });
 
   if (writePlainProgress && plan.runtimeEngines.length > 0) {
-    writeSection(outputStream, "PREQ MCP endpoint");
-    writeIndentedLine(outputStream, plan.mcpUrl);
+    writeSection(outputStream, "PREQSTATION server URL");
+    writeIndentedLine(outputStream, plan.preqstationServerUrl);
+    if (plan.withMcp && plan.mcpUrl) {
+      writeSection(outputStream, "Legacy PREQ MCP endpoint");
+      writeIndentedLine(outputStream, plan.mcpUrl);
+    }
   }
 
   if (plan.installTargets.length > 0) {
@@ -781,39 +791,41 @@ export async function runInstallWizard({
           }),
       });
 
-      runtimeSteps.push({
-        runtime,
-        kind: "mcp",
-        title: `Register ${describeRuntime(runtime)} MCP`,
-        summaryGroup: createSummaryGroup(runtime),
-        task: () =>
-          installRuntimeMcpServersFn({
-            env,
-            runtimes: [runtime],
-            serverUrl: plan.preqstationServerUrl,
-          }),
-        format: (runtimeResults) =>
-          formatRuntimeTaskResult({
-            runtime,
-            kind: "mcp",
-            result: runtimeResults[0],
-            mcpUrl: plan.mcpUrl,
-          }),
-        logFormat: (runtimeResults) =>
-          formatRuntimeTaskResult({
-            runtime,
-            kind: "mcp",
-            result: runtimeResults[0],
-            mcpUrl: plan.mcpUrl,
-          }),
-        summaryFormat: (runtimeResults) =>
-          formatRuntimeSummaryTaskResult({
-            runtime,
-            kind: "mcp",
-            result: runtimeResults[0],
-            mcpUrl: plan.mcpUrl,
-          }),
-      });
+      if (plan.withMcp) {
+        runtimeSteps.push({
+          runtime,
+          kind: "mcp",
+          title: `Register ${describeRuntime(runtime)} legacy MCP`,
+          summaryGroup: createSummaryGroup(runtime),
+          task: () =>
+            installRuntimeMcpServersFn({
+              env,
+              runtimes: [runtime],
+              serverUrl: plan.preqstationServerUrl,
+            }),
+          format: (runtimeResults) =>
+            formatRuntimeTaskResult({
+              runtime,
+              kind: "mcp",
+              result: runtimeResults[0],
+              mcpUrl: plan.mcpUrl,
+            }),
+          logFormat: (runtimeResults) =>
+            formatRuntimeTaskResult({
+              runtime,
+              kind: "mcp",
+              result: runtimeResults[0],
+              mcpUrl: plan.mcpUrl,
+            }),
+          summaryFormat: (runtimeResults) =>
+            formatRuntimeSummaryTaskResult({
+              runtime,
+              kind: "mcp",
+              result: runtimeResults[0],
+              mcpUrl: plan.mcpUrl,
+            }),
+        });
+      }
     }
 
     const runtimeStepResults = await runTaskSteps({
@@ -848,7 +860,7 @@ export async function runInstallWizard({
       } else {
         writeStatusRow(
           outputStream,
-          `${describeRuntime(step.runtime)} MCP`,
+          `${describeRuntime(step.runtime)} legacy MCP`,
           runtimeResult?.action === "mcp_already_configured" ? "current" : "registered",
         );
       }
@@ -866,7 +878,8 @@ export async function runInstallWizard({
     install_targets: plan.installTargets,
     runtime_engines: plan.runtimeEngines,
     preqstation_server_url: plan.preqstationServerUrl,
-    mcp_url: plan.mcpUrl,
+    with_mcp: plan.withMcp,
+    mcp_url: plan.withMcp ? plan.mcpUrl : null,
     results,
   };
 }

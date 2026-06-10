@@ -26,6 +26,14 @@ CLI auth commands:
 
 `auth login` and `auth status` print JSON. `whoami` is present as a CLI surface but currently returns a structured `auth_identity_unavailable` error until the PREQSTATION server exposes an identity endpoint or tool.
 
+Legacy MCP cleanup:
+
+- `preqstation mcp disable claude-code`
+- `preqstation mcp disable codex`
+- `preqstation mcp disable gemini-cli`
+
+`mcp disable` removes only the native PREQ MCP registration for that runtime. It leaves worker support and skills installed.
+
 Lifecycle CLI commands:
 
 - `preqstation task get PROJ-123`

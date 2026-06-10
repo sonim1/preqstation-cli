@@ -13,6 +13,7 @@ import { dispatchPreqRun as defaultDispatchPreqRun } from "../core/dispatch-runt
 import { parseHermesDispatchPayload } from "../adapters/hermes/payload.mjs";
 import { runInstallWizard as defaultRunInstallWizard } from "../install-wizard.mjs";
 import { runUninstallWizard as defaultRunUninstallWizard } from "../uninstall-wizard.mjs";
+import { resolveWorkerHome } from "../detached-launch.mjs";
 import { parseDispatchMessage } from "../parse-dispatch-message.mjs";
 import {
   callPreqstationMcpTool as defaultCallPreqstationMcpTool,
@@ -65,6 +66,11 @@ import {
 
 const UPDATE_HOST_TARGETS = ["openclaw", "hermes"];
 const UPDATE_RUNTIME_TARGETS = ["claude-code", "codex", "gemini-cli"];
+const WORKER_HOME_ENV_BY_RUNTIME = {
+  "claude-code": "PREQSTATION_CLAUDE_HOME",
+  codex: "PREQSTATION_CODEX_HOME",
+  "gemini-cli": "PREQSTATION_GEMINI_HOME",
+};
 const PACKAGE_JSON_FILE = new URL("../../package.json", import.meta.url);
 const CLI_COMMAND_NAME = "preqstation";
 const DEFAULT_CLACK_SUMMARY_UI = {
@@ -84,6 +90,9 @@ const SUMMARY_SECTION_THEMES = {
   "Request entrypoints": "#22D3EE",
   "Agent runtimes": "#10A37F",
   MCP: "#4796E3",
+  "Legacy MCP": "#4796E3",
+  "CLI Auth": "#10A37F",
+  "Worker Auth": "#D97757",
   "Mapped Projects": "#10A37F",
   "Matched Projects": "#10A37F",
   "Unmatched Projects": "#F59E0B",
@@ -119,10 +128,12 @@ const HELP_SECTIONS = [
     title: "Install & Update",
     commands: [`${CLI_COMMAND_NAME} install`, `${CLI_COMMAND_NAME} uninstall`, `${CLI_COMMAND_NAME} update`],
     advanced: [
+      `${CLI_COMMAND_NAME} install --with-mcp`,
       `${CLI_COMMAND_NAME} install openclaw`,
       `${CLI_COMMAND_NAME} install hermes`,
       `${CLI_COMMAND_NAME} uninstall openclaw`,
       `${CLI_COMMAND_NAME} uninstall hermes`,
+      `${CLI_COMMAND_NAME} mcp disable codex`,
       `${CLI_COMMAND_NAME} sync hermes`,
       `${CLI_COMMAND_NAME} status hermes`,
     ],
@@ -450,7 +461,7 @@ function describeInstallResultLabel(result) {
     result.action === "mcp_removed" ||
     result.action === "mcp_not_configured"
   ) {
-    return `${describeRuntimeTarget(result.target)} MCP`;
+    return `${describeRuntimeTarget(result.target)} legacy MCP`;
   }
   if (result.target === "openclaw" || result.target === "hermes") {
     return describeInstallTarget(result.target);
@@ -571,6 +582,9 @@ function describeInstallResultDetails(result) {
   }
   if (result.auth) {
     details.push(`auth: ${result.auth}`);
+  }
+  if (result.legacy) {
+    details.push(result.action === "mcp_missing" ? "legacy optional" : "legacy");
   }
   if (result.user_modified) {
     details.push("local changes");
@@ -820,7 +834,7 @@ function formatInteractiveInstallSummary(result) {
     formatSummarySection("Request entrypoints", hosts),
     formatSummarySection("Agent runtimes", support),
     formatSummarySection(
-      "MCP",
+      "Legacy MCP",
       [
         ...(result.mcp_url
           ? [
@@ -910,12 +924,12 @@ function formatInteractiveUpdateSummary(result) {
         ...(result.server_url
           ? [{ label: "Server URL", status: result.server_url, details: "" }]
           : []),
-        ...(result.mcp_url ? [{ label: "MCP endpoint", status: result.mcp_url, details: "" }] : []),
+        ...(result.mcp_url ? [{ label: "Legacy MCP endpoint", status: result.mcp_url, details: "" }] : []),
       ],
     ),
     formatSummarySection("Request entrypoints", hosts),
     formatSummarySection("Agent runtimes", support),
-    formatSummarySection("MCP", mcp),
+    formatSummarySection("Legacy MCP", mcp),
     ...formatProjectSetupSections(result.project_setup),
   ];
   return joinSummarySections("Update summary", sections);
@@ -975,12 +989,29 @@ function formatDoctorSummary(result) {
           status: result.server_url || "not configured",
           details: "",
         },
-        ...(result.mcp_url ? [{ label: "MCP endpoint", status: result.mcp_url, details: "" }] : []),
+        ...(result.mcp_url ? [{ label: "Legacy MCP endpoint", status: result.mcp_url, details: "" }] : []),
+        ...(result.auth
+          ? [
+              {
+                label: "CLI auth",
+                status: result.auth.ok ? "ready" : "attention",
+                details: result.auth.auth_source || result.auth.oauth_path || "",
+              },
+            ]
+          : []),
       ],
     ),
     formatSummarySection("Request entrypoints", hosts),
     formatSummarySection("Agent runtimes", support),
-    formatSummarySection("MCP", mcp),
+    formatSummarySection("Legacy MCP", mcp),
+    formatSummarySection(
+      "Worker Auth",
+      (result.worker_auth ?? []).map((entry) => ({
+        label: describeRuntimeTarget(entry.target),
+        status: entry.ok ? "ready" : "attention",
+        details: [entry.worker_home, entry.auth_source || entry.oauth_path].filter(Boolean).join(" "),
+      })),
+    ),
     ...formatDoctorProjectMappingSections(result.project_mappings),
     formatSummarySection(
       "Next steps",
@@ -999,7 +1030,7 @@ function formatInteractiveUninstallSummary(result) {
   const sections = [
     formatSummarySection("Request entrypoints", hosts),
     formatSummarySection("Agent runtimes", support),
-    formatSummarySection("MCP", mcp),
+    formatSummarySection("Legacy MCP", mcp),
     formatSummarySection("Settings", [
       {
         label: "Project mappings",
@@ -1097,7 +1128,7 @@ function renderUpdatePlan({ stdout, options, clackUi }) {
     [
       "Refresh installed request entrypoints",
       "Update installed agent runtime support",
-      "Check agent CLI paths and MCP registrations",
+      "Check agent CLI paths and legacy MCP registrations",
       "Refresh project mappings from PREQ MCP",
     ].join("\n"),
     "Update plan",
@@ -1187,6 +1218,75 @@ function normalizeHermesStatusForSummary(status) {
   };
 }
 
+async function inspectCliAuthStatus({
+  env,
+  serverUrl,
+  inspectPreqstationAuthFn,
+}) {
+  const paths = createAuthPaths(env);
+  const auth = await inspectPreqstationAuthFn({
+    oauthPath: paths.oauth_path,
+    env,
+  });
+  return {
+    ok: Boolean(serverUrl) && auth.authenticated,
+    target: "cli-auth",
+    action: Boolean(serverUrl) && auth.authenticated ? "ready" : "needs_attention",
+    server_url: serverUrl,
+    authenticated: auth.authenticated,
+    auth_source: auth.auth_source,
+    oauth_cache_exists: auth.oauth_cache_exists,
+    ...paths,
+  };
+}
+
+function hasWorkerHomeOverride(env, runtime) {
+  const runtimeKey = WORKER_HOME_ENV_BY_RUNTIME[runtime];
+  return Boolean(
+    (runtimeKey && String(env?.[runtimeKey] || "").trim()) ||
+      String(env?.PREQSTATION_WORKER_HOME || "").trim(),
+  );
+}
+
+async function inspectWorkerAuthStatuses({
+  env,
+  runtimes,
+  inspectPreqstationAuthFn,
+  resolveDefaultPreqstationServerUrlFn,
+}) {
+  const entries = [];
+  for (const runtime of runtimes) {
+    if (!hasWorkerHomeOverride(env, runtime)) {
+      continue;
+    }
+    const workerEnv = {
+      ...env,
+      HOME: resolveWorkerHome(env, runtime),
+    };
+    const serverUrl = await resolveDefaultPreqstationServerUrlFn({
+      env: workerEnv,
+      runtimes: [],
+    }).catch(() => null);
+    const status = await inspectCliAuthStatus({
+      env: workerEnv,
+      serverUrl,
+      inspectPreqstationAuthFn,
+    });
+    entries.push({
+      ...status,
+      target: runtime,
+      worker_home: workerEnv.HOME,
+    });
+  }
+  return entries;
+}
+
+function markLegacyMcpResults(results) {
+  return (Array.isArray(results) ? results : []).map((entry) =>
+    isMcpResult(entry) ? { ...entry, legacy: true } : entry,
+  );
+}
+
 async function inspectProjectMappings({ env }) {
   const mappingPath = getProjectsFile(env);
   const mappings = await readProjectMappings(mappingPath);
@@ -1218,10 +1318,10 @@ function isDoctorEntryHealthy(entry) {
   if (entry?.ok === false) {
     return false;
   }
-  return !["failed", "unavailable", "needs_attention", "mcp_missing"].includes(entry?.action);
+  return !["failed", "unavailable", "needs_attention"].includes(entry?.action);
 }
 
-function buildDoctorRecommendations({ serverUrl, projectMappings, results }) {
+function buildDoctorRecommendations({ serverUrl, projectMappings, results, authStatus, workerAuth }) {
   const recommendations = [];
   const add = (command) => {
     if (!recommendations.includes(command)) {
@@ -1232,10 +1332,16 @@ function buildDoctorRecommendations({ serverUrl, projectMappings, results }) {
   if (
     !serverUrl ||
     results.some((entry) =>
-      ["not_installed", "not_enabled", "unavailable", "mcp_missing"].includes(entry?.action),
+      !isMcpResult(entry) && ["not_installed", "not_enabled", "unavailable"].includes(entry?.action),
     )
   ) {
     add(`${CLI_COMMAND_NAME} install`);
+  }
+  if (authStatus && !authStatus.ok) {
+    add(`${CLI_COMMAND_NAME} auth login --server-url ${serverUrl || "https://<your-domain>"}`);
+  }
+  if ((workerAuth ?? []).some((entry) => !entry.ok)) {
+    add(`${CLI_COMMAND_NAME} auth login --server-url ${serverUrl || "https://<your-domain>"}`);
   }
   if (results.some((entry) => entry?.action === "needs_attention")) {
     add(`${CLI_COMMAND_NAME} update`);
@@ -1471,6 +1577,7 @@ async function handleInstallCommand({
       outputStream: stdout,
       env,
       force: options.force === "true",
+      withMcp: options["with-mcp"] === "true",
     });
     await persistInstallServerUrl({
       installResult: result,
@@ -1576,7 +1683,7 @@ async function handleUninstallCommand({
 
   if (["claude-code", "codex", "gemini-cli"].includes(target)) {
     const results = [
-      ...(await uninstallRuntimeMcpServersFn({ env, runtimes: [target] })),
+      ...markLegacyMcpResults(await uninstallRuntimeMcpServersFn({ env, runtimes: [target] })),
       ...(await uninstallRuntimeWorkerSupportFn({ env, runtimes: [target] })),
     ];
     const result = {
@@ -1608,6 +1715,7 @@ async function handleDoctorCommand({
   inspectRuntimeWorkerSupportFn = inspectRuntimeWorkerSupport,
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
+  inspectPreqstationAuthFn = defaultInspectPreqstationAuth,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
 }) {
   const { options, positional } = parseOptions(args);
@@ -1635,6 +1743,33 @@ async function handleDoctorCommand({
     title: "Checking project mappings",
     done: "Project mappings checked",
     task: () => inspectProjectMappings({ env }),
+  });
+  const authStatus = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking CLI auth",
+    done: "CLI auth checked",
+    task: () =>
+      inspectCliAuthStatus({
+        env,
+        serverUrl,
+        inspectPreqstationAuthFn,
+      }),
+  });
+  const workerAuth = await runProgressStep({
+    stdout,
+    clackUi,
+    enabled: progressEnabled,
+    title: "Checking worker CLI auth",
+    done: "Worker CLI auth checked",
+    task: () =>
+      inspectWorkerAuthStatuses({
+        env,
+        runtimes: UPDATE_RUNTIME_TARGETS,
+        inspectPreqstationAuthFn,
+        resolveDefaultPreqstationServerUrlFn,
+      }),
   });
   const results = [];
 
@@ -1702,8 +1837,8 @@ async function handleDoctorCommand({
     stdout,
     clackUi,
     enabled: progressEnabled,
-    title: "Checking MCP registrations",
-    done: "MCP registrations checked",
+    title: "Checking legacy MCP registrations",
+    done: "Legacy MCP registrations checked",
     task: () =>
       runSafeDoctorTarget("mcp", () =>
         inspectRuntimeMcpServersFn({
@@ -1713,21 +1848,31 @@ async function handleDoctorCommand({
       ),
   });
   results.push(
-    ...(Array.isArray(mcpResults)
-      ? mcpResults
-      : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...mcpResults, target }))),
+    ...markLegacyMcpResults(
+      Array.isArray(mcpResults)
+        ? mcpResults
+        : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...mcpResults, target })),
+    ),
   );
 
   const recommendations = buildDoctorRecommendations({
     serverUrl,
     projectMappings,
     results,
+    authStatus,
+    workerAuth,
   });
   const payload = {
-    ok: projectMappings.ok && results.every(isDoctorEntryHealthy),
+    ok:
+      projectMappings.ok &&
+      authStatus.ok &&
+      workerAuth.every((entry) => entry.ok) &&
+      results.every(isDoctorEntryHealthy),
     action,
     server_url: serverUrl,
     mcp_url: serverUrl ? buildPreqstationMcpUrl(serverUrl) : null,
+    auth: authStatus,
+    worker_auth: workerAuth,
     project_mappings: projectMappings,
     recommendations,
     results,
@@ -1858,8 +2003,8 @@ async function handleUpdateCommand({
     stdout,
     clackUi,
     enabled: progressEnabled,
-    title: "Checking MCP registrations",
-    done: "MCP registrations checked",
+    title: "Checking legacy MCP registrations",
+    done: "Legacy MCP registrations checked",
     task: async () => {
       const entries = [];
       for (const runtime of UPDATE_RUNTIME_TARGETS) {
@@ -1875,7 +2020,7 @@ async function handleUpdateCommand({
       return entries;
     },
   });
-  results.push(...mcpResults);
+  results.push(...markLegacyMcpResults(mcpResults));
 
   const serverUrl = await runProgressStep({
     stdout,
@@ -1979,11 +2124,35 @@ async function handleMcpCommand({
   env,
   callPreqstationMcpToolFn,
   resolveDefaultPreqstationServerUrlFn,
+  uninstallRuntimeMcpServersFn,
 }) {
   const { options, positional } = parseOptions(args);
   const [subcommand, toolName] = positional;
+  if (subcommand === "disable") {
+    const target = toolName;
+    if (!UPDATE_RUNTIME_TARGETS.includes(target)) {
+      throw new Error(
+        `Usage: ${CLI_COMMAND_NAME} mcp disable <${UPDATE_RUNTIME_TARGETS.join("|")}>`,
+      );
+    }
+    const results = await uninstallRuntimeMcpServersFn({
+      env,
+      runtimes: [target],
+    });
+    const payload = {
+      ok: results.every((entry) => entry?.ok !== false),
+      action: "mcp_disabled",
+      runtime_engines: [target],
+      results: markLegacyMcpResults(results),
+    };
+    stdout.write(`${JSON.stringify(payload)}\n`);
+    return payload.ok ? 0 : 1;
+  }
+
   if (subcommand !== "call" || !toolName) {
-    throw new Error(`Usage: ${CLI_COMMAND_NAME} mcp call <tool-name> --json '{"taskId":"PROJ-123"}'`);
+    throw new Error(
+      `Usage: ${CLI_COMMAND_NAME} mcp call <tool-name> --json '{"taskId":"PROJ-123"}' or ${CLI_COMMAND_NAME} mcp disable <runtime>`,
+    );
   }
 
   const serverUrl =
@@ -2005,6 +2174,7 @@ async function handleMcpCommand({
     env,
   });
   stdout.write(`${JSON.stringify(result)}\n`);
+  return 0;
 }
 
 function createAuthPaths(env) {
@@ -2559,6 +2729,7 @@ export async function runDispatcherCli({
         inspectRuntimeWorkerSupportFn,
         inspectRuntimeExecutableHealthFn,
         inspectRuntimeMcpServersFn,
+        inspectPreqstationAuthFn,
         resolveDefaultPreqstationServerUrlFn,
       });
     }
@@ -2584,6 +2755,7 @@ export async function runDispatcherCli({
         inspectRuntimeWorkerSupportFn,
         inspectRuntimeExecutableHealthFn,
         inspectRuntimeMcpServersFn,
+        inspectPreqstationAuthFn,
         resolveDefaultPreqstationServerUrlFn,
       });
     }
@@ -2642,14 +2814,14 @@ export async function runDispatcherCli({
     }
 
     if (command === "mcp") {
-      await handleMcpCommand({
+      return handleMcpCommand({
         args,
         stdout,
         env,
         callPreqstationMcpToolFn,
         resolveDefaultPreqstationServerUrlFn,
+        uninstallRuntimeMcpServersFn,
       });
-      return 0;
     }
 
     const parsed = await parseDispatchFromCommand(command, args);
