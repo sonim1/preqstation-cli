@@ -154,6 +154,15 @@ const HELP_SECTIONS = [
     ],
   },
   {
+    title: "Lifecycle",
+    commands: [
+      `${CLI_COMMAND_NAME} task get PROJ-123`,
+      `${CLI_COMMAND_NAME} task complete PROJ-123 --json-file result.json`,
+      `${CLI_COMMAND_NAME} comment reply --comment-id COMMENT_ID --body-file reply.md`,
+      `${CLI_COMMAND_NAME} project settings --project PROJ`,
+    ],
+  },
+  {
     title: "Info",
     commands: [
       `${CLI_COMMAND_NAME} status`,
@@ -234,6 +243,10 @@ function normalizeProjectKey(value) {
 
 async function readJsonFile(filePath) {
   return JSON.parse(await fs.readFile(filePath, "utf8"));
+}
+
+async function readTextFile(filePath) {
+  return fs.readFile(filePath, "utf8");
 }
 
 async function readPackageMetadata() {
@@ -2104,6 +2117,326 @@ function createWhoamiUnavailableError() {
   );
 }
 
+function requirePositional(positional, label) {
+  const value = positional[0];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${label} is required`);
+  }
+  return value.trim();
+}
+
+function inferProjectKeyFromTaskId(taskId) {
+  const [projectKey] = String(taskId || "").split("-");
+  return normalizeProjectKey(projectKey);
+}
+
+function parseOptionalInteger(options, name) {
+  const value = options[name];
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`--${name} must be an integer`);
+  }
+  return parsed;
+}
+
+function withOptionalEngine(payload, options) {
+  if (options.engine) {
+    return { ...payload, engine: options.engine };
+  }
+  return payload;
+}
+
+async function readJsonOption(options, name) {
+  return readJsonFile(requireOption(options, name));
+}
+
+async function readTextOption(options, name) {
+  return readTextFile(requireOption(options, name));
+}
+
+function lifecycleCall(toolName, toolArguments) {
+  return { toolName, toolArguments };
+}
+
+async function buildTaskLifecycleCall(args) {
+  const [subcommand, ...rest] = args;
+  const { options, positional } = parseOptions(rest);
+
+  if (subcommand === "get") {
+    return lifecycleCall("preq_get_task", {
+      taskId: requirePositional(positional, "task id"),
+    });
+  }
+
+  if (subcommand === "start") {
+    return lifecycleCall(
+      "preq_start_task",
+      withOptionalEngine({ taskId: requirePositional(positional, "task id") }, options),
+    );
+  }
+
+  if (subcommand === "note") {
+    return lifecycleCall(
+      "preq_update_task_note",
+      withOptionalEngine(
+        {
+          taskId: requirePositional(positional, "task id"),
+          noteMarkdown: await readTextOption(options, "body-file"),
+        },
+        options,
+      ),
+    );
+  }
+
+  if (subcommand === "status") {
+    const payload = withOptionalEngine(
+      {
+        taskId: requirePositional(positional, "task id"),
+        status: requireOption(options, "status"),
+      },
+      options,
+    );
+    if (options["clear-run-state"] === "true") {
+      payload.clearRunState = true;
+    }
+    return lifecycleCall("preq_update_task_status", payload);
+  }
+
+  if (subcommand === "complete") {
+    return lifecycleCall("preq_complete_task", {
+      taskId: requirePositional(positional, "task id"),
+      ...(await readJsonOption(options, "json-file")),
+    });
+  }
+
+  if (subcommand === "block") {
+    return lifecycleCall(
+      "preq_block_task",
+      withOptionalEngine(
+        {
+          taskId: requirePositional(positional, "task id"),
+          reason: await readTextOption(options, "reason-file"),
+        },
+        options,
+      ),
+    );
+  }
+
+  if (subcommand === "plan") {
+    const taskId = requirePositional(positional, "task id");
+    return lifecycleCall(
+      "preq_plan_task",
+      withOptionalEngine(
+        {
+          taskId,
+          projectKey: options.project ? normalizeProjectKey(options.project) : inferProjectKeyFromTaskId(taskId),
+          planMarkdown: await readTextOption(options, "plan-file"),
+        },
+        options,
+      ),
+    );
+  }
+
+  if (subcommand === "review") {
+    return lifecycleCall(
+      "preq_review_task",
+      withOptionalEngine(
+        {
+          taskId: requirePositional(positional, "task id"),
+          ...(await readJsonOption(options, "json-file")),
+        },
+        options,
+      ),
+    );
+  }
+
+  if (subcommand === "list") {
+    const payload = {};
+    if (options.project) payload.projectKey = normalizeProjectKey(options.project);
+    if (options.status) payload.status = options.status;
+    if (options.label) payload.label = options.label;
+    if (options.engine) payload.engine = options.engine;
+    if (options["run-state"]) payload.runState = options["run-state"];
+    if (options["dispatch-target"]) payload.dispatchTarget = options["dispatch-target"];
+    if (options.detail) payload.detail = options.detail;
+    const limit = parseOptionalInteger(options, "limit");
+    if (typeof limit === "number") payload.limit = limit;
+    return lifecycleCall("preq_list_tasks", payload);
+  }
+
+  if (subcommand === "create") {
+    const payload = await readJsonOption(options, "json-file");
+    if (options.project) {
+      payload.projectKey = normalizeProjectKey(options.project);
+    }
+    return lifecycleCall("preq_create_task", payload);
+  }
+
+  if (subcommand === "delete") {
+    return lifecycleCall("preq_delete_task", {
+      taskId: requirePositional(positional, "task id"),
+    });
+  }
+
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} task <get|start|note|status|complete|block|plan|review|list|create|delete>`);
+}
+
+async function buildQaLifecycleCall(args) {
+  const [subcommand, ...rest] = args;
+  const { options } = parseOptions(rest);
+  if (subcommand !== "update") {
+    throw new Error(`Usage: ${CLI_COMMAND_NAME} qa update --run-id RUN-123 --json-file report.json`);
+  }
+  return lifecycleCall("preq_update_qa_run", {
+    runId: requireOption(options, "run-id"),
+    ...(await readJsonOption(options, "json-file")),
+  });
+}
+
+async function buildCommentLifecycleCall(args) {
+  const [subcommand, ...rest] = args;
+  const { options } = parseOptions(rest);
+
+  if (subcommand === "list") {
+    return lifecycleCall("preq_list_task_comments", {
+      taskId: requireOption(options, "task"),
+    });
+  }
+
+  if (subcommand === "get") {
+    return lifecycleCall("preq_get_task_comment", {
+      commentId: requireOption(options, "comment-id"),
+    });
+  }
+
+  if (subcommand === "reply") {
+    return lifecycleCall(
+      "preq_reply_task_comment",
+      withOptionalEngine(
+        {
+          commentId: requireOption(options, "comment-id"),
+          body: await readTextOption(options, "body-file"),
+        },
+        options,
+      ),
+    );
+  }
+
+  if (subcommand === "state") {
+    const payload = withOptionalEngine(
+      {
+        commentId: requireOption(options, "comment-id"),
+        runState: requireOption(options, "state"),
+      },
+      options,
+    );
+    if (options["error-message"]) {
+      payload.errorMessage = options["error-message"];
+    }
+    if (options["error-message-file"]) {
+      payload.errorMessage = await readTextOption(options, "error-message-file");
+    }
+    return lifecycleCall("preq_update_task_comment_state", payload);
+  }
+
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} comment <list|get|reply|state>`);
+}
+
+async function buildProjectLifecycleCall(args) {
+  const [subcommand, ...rest] = args;
+  const { options } = parseOptions(rest);
+
+  if (subcommand === "list") {
+    return lifecycleCall("preq_list_projects", {});
+  }
+
+  if (subcommand === "settings") {
+    return lifecycleCall("preq_get_project_settings", {
+      projectKey: normalizeProjectKey(requireOption(options, "project")),
+    });
+  }
+
+  if (subcommand === "activity") {
+    const payload = {
+      from: requireOption(options, "from"),
+      to: requireOption(options, "to"),
+    };
+    if (options.project) {
+      payload.projectKeys = [normalizeProjectKey(options.project)];
+    }
+    const limit = parseOptionalInteger(options, "limit");
+    if (typeof limit === "number") payload.limit = limit;
+    if (options.cursor) payload.cursor = options.cursor;
+    return lifecycleCall("preq_list_project_activity", payload);
+  }
+
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} project <list|settings|activity>`);
+}
+
+async function buildLifecycleCall(command, args) {
+  if (command === "task") {
+    return buildTaskLifecycleCall(args);
+  }
+  if (command === "qa") {
+    return buildQaLifecycleCall(args);
+  }
+  if (command === "comment") {
+    return buildCommentLifecycleCall(args);
+  }
+  if (command === "project") {
+    return buildProjectLifecycleCall(args);
+  }
+  throw new Error(`Unsupported lifecycle command: ${command}`);
+}
+
+async function handleLifecycleCommand({
+  command,
+  args,
+  stdout,
+  stderr,
+  env,
+  resolveDefaultPreqstationServerUrlFn,
+  callPreqstationMcpToolFn,
+}) {
+  try {
+    const { toolName, toolArguments } = await buildLifecycleCall(command, args);
+    const serverUrl = await resolveDefaultPreqstationServerUrlFn({ env });
+    if (!serverUrl) {
+      throw new DispatchError(
+        "worker_auth_unready",
+        `PREQSTATION server URL is required. Run ${CLI_COMMAND_NAME} auth login --server-url https://<your-domain>.`,
+        {
+          suggested_action: "configure_cli_auth",
+          commands: [
+            `${CLI_COMMAND_NAME} auth login --server-url https://<your-domain>`,
+          ],
+        },
+      );
+    }
+    const result = await callPreqstationMcpToolFn({
+      serverUrl,
+      oauthPath: getPreqstationOauthPath(env),
+      toolName,
+      toolArguments,
+      env,
+    });
+    stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
+    return 0;
+  } catch (error) {
+    const dispatchError = isDispatchError(error)
+      ? error
+      : new DispatchError(
+          "preqstation_lifecycle_failed",
+          error instanceof Error ? error.message : String(error),
+        );
+    writeDispatchFailure({ stdout, stderr, error: dispatchError });
+    return 1;
+  }
+}
+
 function writeDispatchResult({ stdout, parsed, result }) {
   stdout.write(
     `${JSON.stringify({
@@ -2294,6 +2627,18 @@ export async function runDispatcherCli({
 
     if (command === "whoami") {
       throw createWhoamiUnavailableError();
+    }
+
+    if (["task", "qa", "comment", "project"].includes(command)) {
+      return handleLifecycleCommand({
+        command,
+        args,
+        stdout,
+        stderr,
+        env,
+        resolveDefaultPreqstationServerUrlFn,
+        callPreqstationMcpToolFn,
+      });
     }
 
     if (command === "mcp") {

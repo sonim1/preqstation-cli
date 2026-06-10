@@ -72,6 +72,9 @@ npx -y @sonim1/preqstation@latest status
 | `preqstation doctor` | Read-only health check for dispatcher configuration and runtime availability. |
 | `preqstation auth login` | Store the PREQSTATION server URL and create the shared OAuth cache. |
 | `preqstation auth status` | Read-only CLI auth readiness check, including the inspected home and OAuth path. |
+| `preqstation task get PROJ-123` | Read task lifecycle data through the CLI JSON contract. |
+| `preqstation comment reply --comment-id ID --body-file reply.md` | Reply to task comments without native MCP tool calls. |
+| `preqstation project settings --project PROJ` | Read deployment/project settings through the CLI JSON contract. |
 | `preqstation setup auto` | Discover local projects and save shared PREQ project mappings. |
 | `preqstation run` | Dispatch a PREQ task or project objective directly from the CLI. |
 | `preqstation uninstall` | Remove installed entrypoints, runtime support, or project mappings. |

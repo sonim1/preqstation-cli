@@ -22,6 +22,10 @@ npx -y @sonim1/preqstation@latest status
 | `preqstation auth status` | Read-only CLI auth status, including inspected home, config path, and OAuth path. |
 | `preqstation auth logout` | Remove cached OAuth credentials without deleting project mappings or server URL config. |
 | `preqstation whoami` | Reserved for server-side identity support; currently reports a structured unavailable error. |
+| `preqstation task get PROJ-123` | Read task data as `ok: true` JSON. |
+| `preqstation task complete PROJ-123 --json-file result.json` | Submit completion payload from a file. |
+| `preqstation comment reply --comment-id ID --body-file reply.md` | Reply to a PREQ task comment from a file. |
+| `preqstation project settings --project PROJ` | Fetch project settings as JSON. |
 | `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, MCP, and project mappings. |
 | `preqstation doctor` | Read-only health check with the same status surface plus recommended next actions. |
 | `preqstation uninstall` | Remove installed entrypoints, runtime MCP registrations, and worker support while keeping local project mappings. |

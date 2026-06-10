@@ -1164,6 +1164,205 @@ test("whoami reports the current server-side identity blocker", async () => {
   assert.match(stderr.join(""), /auth_identity_unavailable/);
 });
 
+test("lifecycle commands call the matching PREQ MCP tools with typed JSON output", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-lifecycle-cli-"));
+  const notePath = path.join(tempDir, "note.md");
+  const completePath = path.join(tempDir, "complete.json");
+  const blockPath = path.join(tempDir, "block.md");
+  const planPath = path.join(tempDir, "plan.md");
+  const reviewPath = path.join(tempDir, "review.json");
+  const createPath = path.join(tempDir, "create.json");
+  const qaPath = path.join(tempDir, "qa.json");
+  const replyPath = path.join(tempDir, "reply.md");
+  await fs.writeFile(notePath, "new note\n");
+  await fs.writeFile(
+    completePath,
+    JSON.stringify({ summary: "done", tests: "npm test", prUrl: "https://github.com/o/r/p/1" }),
+  );
+  await fs.writeFile(blockPath, "blocked reason\n");
+  await fs.writeFile(planPath, "plan body\n");
+  await fs.writeFile(reviewPath, JSON.stringify({ summary: "verified" }));
+  await fs.writeFile(createPath, JSON.stringify({ title: "Task", repo: "https://github.com/o/r" }));
+  await fs.writeFile(qaPath, JSON.stringify({ status: "passed", targetUrl: "https://example.com" }));
+  await fs.writeFile(replyPath, "reply body\n");
+
+  const cases = [
+    {
+      argv: ["task", "get", "PROJ-123"],
+      toolName: "preq_get_task",
+      toolArguments: { taskId: "PROJ-123" },
+    },
+    {
+      argv: ["task", "start", "PROJ-123", "--engine", "codex"],
+      toolName: "preq_start_task",
+      toolArguments: { taskId: "PROJ-123", engine: "codex" },
+    },
+    {
+      argv: ["task", "note", "PROJ-123", "--body-file", notePath, "--engine", "codex"],
+      toolName: "preq_update_task_note",
+      toolArguments: { taskId: "PROJ-123", noteMarkdown: "new note\n", engine: "codex" },
+    },
+    {
+      argv: ["task", "status", "PROJ-123", "--status", "ready", "--clear-run-state"],
+      toolName: "preq_update_task_status",
+      toolArguments: { taskId: "PROJ-123", status: "ready", clearRunState: true },
+    },
+    {
+      argv: ["task", "complete", "PROJ-123", "--json-file", completePath],
+      toolName: "preq_complete_task",
+      toolArguments: {
+        taskId: "PROJ-123",
+        summary: "done",
+        tests: "npm test",
+        prUrl: "https://github.com/o/r/p/1",
+      },
+    },
+    {
+      argv: ["task", "block", "PROJ-123", "--reason-file", blockPath],
+      toolName: "preq_block_task",
+      toolArguments: { taskId: "PROJ-123", reason: "blocked reason\n" },
+    },
+    {
+      argv: ["task", "plan", "PROJ-123", "--plan-file", planPath],
+      toolName: "preq_plan_task",
+      toolArguments: { taskId: "PROJ-123", projectKey: "PROJ", planMarkdown: "plan body\n" },
+    },
+    {
+      argv: ["task", "review", "PROJ-123", "--json-file", reviewPath, "--engine", "codex"],
+      toolName: "preq_review_task",
+      toolArguments: { taskId: "PROJ-123", summary: "verified", engine: "codex" },
+    },
+    {
+      argv: ["task", "list", "--project", "PROJ", "--detail", "full", "--limit", "20"],
+      toolName: "preq_list_tasks",
+      toolArguments: { projectKey: "PROJ", detail: "full", limit: 20 },
+    },
+    {
+      argv: ["task", "create", "--project", "PROJ", "--json-file", createPath],
+      toolName: "preq_create_task",
+      toolArguments: { projectKey: "PROJ", title: "Task", repo: "https://github.com/o/r" },
+    },
+    {
+      argv: ["task", "delete", "PROJ-123"],
+      toolName: "preq_delete_task",
+      toolArguments: { taskId: "PROJ-123" },
+    },
+    {
+      argv: ["qa", "update", "--run-id", "RUN-123", "--json-file", qaPath],
+      toolName: "preq_update_qa_run",
+      toolArguments: { runId: "RUN-123", status: "passed", targetUrl: "https://example.com" },
+    },
+    {
+      argv: ["comment", "list", "--task", "PROJ-123"],
+      toolName: "preq_list_task_comments",
+      toolArguments: { taskId: "PROJ-123" },
+    },
+    {
+      argv: ["comment", "get", "--comment-id", "COMMENT-123"],
+      toolName: "preq_get_task_comment",
+      toolArguments: { commentId: "COMMENT-123" },
+    },
+    {
+      argv: ["comment", "reply", "--comment-id", "COMMENT-123", "--body-file", replyPath],
+      toolName: "preq_reply_task_comment",
+      toolArguments: { commentId: "COMMENT-123", body: "reply body\n" },
+    },
+    {
+      argv: ["comment", "state", "--comment-id", "COMMENT-123", "--state", "done", "--engine", "codex"],
+      toolName: "preq_update_task_comment_state",
+      toolArguments: { commentId: "COMMENT-123", runState: "done", engine: "codex" },
+    },
+    {
+      argv: ["project", "list"],
+      toolName: "preq_list_projects",
+      toolArguments: {},
+    },
+    {
+      argv: ["project", "settings", "--project", "PROJ"],
+      toolName: "preq_get_project_settings",
+      toolArguments: { projectKey: "PROJ" },
+    },
+    {
+      argv: [
+        "project",
+        "activity",
+        "--project",
+        "PROJ",
+        "--from",
+        "2026-01-01T00:00:00.000Z",
+        "--to",
+        "2026-01-02T00:00:00.000Z",
+        "--limit",
+        "5",
+      ],
+      toolName: "preq_list_project_activity",
+      toolArguments: {
+        projectKeys: ["PROJ"],
+        from: "2026-01-01T00:00:00.000Z",
+        to: "2026-01-02T00:00:00.000Z",
+        limit: 5,
+      },
+    },
+  ];
+
+  for (const entry of cases) {
+    const stdout = [];
+    const calls = [];
+    const exitCode = await runDispatcherCli({
+      argv: entry.argv,
+      stdout: { write: (value) => stdout.push(value) },
+      stderr: { write: () => {} },
+      env: {
+        PATH: process.env.PATH,
+        PREQSTATION_SERVER_URL: "https://preq.example.com",
+        PREQSTATION_DISPATCH_HOME: path.join(tempDir, "dispatch"),
+      },
+      callPreqstationMcpToolFn: async (params) => {
+        calls.push(params);
+        return { tool: params.toolName };
+      },
+    });
+
+    assert.equal(exitCode, 0, entry.argv.join(" "));
+    assert.equal(calls.length, 1, entry.argv.join(" "));
+    assert.equal(calls[0].serverUrl, "https://preq.example.com");
+    assert.equal(calls[0].oauthPath, path.join(tempDir, "dispatch", "oauth.json"));
+    assert.equal(calls[0].toolName, entry.toolName);
+    assert.deepEqual(calls[0].toolArguments, entry.toolArguments);
+    assert.deepEqual(JSON.parse(stdout.join("")), {
+      ok: true,
+      result: { tool: entry.toolName },
+    });
+  }
+});
+
+test("lifecycle command failures use ok false JSON", async () => {
+  const stdout = [];
+  const stderr = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["task", "get", "PROJ-123"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: (value) => stderr.push(value) },
+    env: {
+      PATH: process.env.PATH,
+      PREQSTATION_SERVER_URL: "https://preq.example.com",
+    },
+    callPreqstationMcpToolFn: async () => {
+      throw new Error("server down");
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: false,
+    error: {
+      code: "preqstation_lifecycle_failed",
+      message: "server down",
+    },
+  });
+  assert.match(stderr.join(""), /preqstation_lifecycle_failed/);
+});
+
 test("run passes comment-id flag through for comment objectives", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-comment-cli-"));
   const stdout = [];
