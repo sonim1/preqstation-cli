@@ -54,7 +54,6 @@ import {
 import {
   inspectRuntimeExecutableHealth,
   inspectRuntimeWorkerSupport,
-  installRuntimeWorkerSupport,
   uninstallRuntimeWorkerSupport,
 } from "../runtime-skill-installer.mjs";
 import {
@@ -478,6 +477,15 @@ function describeInstallResultAction(result) {
       return "attention";
     }
   }
+  if (result.legacy_worker_skill) {
+    if (result.action === "failed") {
+      return "failed";
+    }
+    if (["not_installed", "not_enabled", "unavailable"].includes(result.action)) {
+      return "optional";
+    }
+    return "legacy";
+  }
   if (result.action === "mcp_installed") {
     return "registered";
   }
@@ -585,6 +593,9 @@ function describeInstallResultDetails(result) {
   }
   if (result.legacy) {
     details.push(result.action === "mcp_missing" ? "legacy optional" : "legacy");
+  }
+  if (result.legacy_worker_skill) {
+    details.push("optional worker skill");
   }
   if (result.user_modified) {
     details.push("local changes");
@@ -714,6 +725,8 @@ const SUMMARY_STATUS_PRIORITY = new Map([
   ["registered", 30],
   ["configured", 30],
   ["removed", 20],
+  ["legacy", 10],
+  ["optional", 10],
 ]);
 
 function isRuntimeTarget(target) {
@@ -728,6 +741,15 @@ function isMcpResult(entry) {
     entry.action === "mcp_missing" ||
     entry.action === "mcp_removed" ||
     entry.action === "mcp_not_configured"
+  );
+}
+
+function isRuntimeWorkerSkillResult(entry) {
+  return Boolean(
+    entry &&
+      isRuntimeTarget(entry.target) &&
+      entry.category !== "runtime_executable" &&
+      !isMcpResult(entry),
   );
 }
 
@@ -1127,7 +1149,7 @@ function renderUpdatePlan({ stdout, options, clackUi }) {
   clackUi.note(
     [
       "Refresh installed request entrypoints",
-      "Update installed agent runtime support",
+      "Check optional legacy worker skills",
       "Check agent CLI paths and legacy MCP registrations",
       "Refresh project mappings from PREQ MCP",
     ].join("\n"),
@@ -1287,6 +1309,12 @@ function markLegacyMcpResults(results) {
   );
 }
 
+function markLegacyWorkerSkillResults(results) {
+  return (Array.isArray(results) ? results : []).map((entry) =>
+    isRuntimeWorkerSkillResult(entry) ? { ...entry, legacy_worker_skill: true } : entry,
+  );
+}
+
 async function inspectProjectMappings({ env }) {
   const mappingPath = getProjectsFile(env);
   const mappings = await readProjectMappings(mappingPath);
@@ -1318,6 +1346,9 @@ function isDoctorEntryHealthy(entry) {
   if (entry?.ok === false) {
     return false;
   }
+  if (entry?.legacy_worker_skill) {
+    return true;
+  }
   return !["failed", "unavailable", "needs_attention"].includes(entry?.action);
 }
 
@@ -1332,7 +1363,9 @@ function buildDoctorRecommendations({ serverUrl, projectMappings, results, authS
   if (
     !serverUrl ||
     results.some((entry) =>
-      !isMcpResult(entry) && ["not_installed", "not_enabled", "unavailable"].includes(entry?.action),
+      !isMcpResult(entry) &&
+      !entry?.legacy_worker_skill &&
+      ["not_installed", "not_enabled", "unavailable"].includes(entry?.action),
     )
   ) {
     add(`${CLI_COMMAND_NAME} install`);
@@ -1343,7 +1376,7 @@ function buildDoctorRecommendations({ serverUrl, projectMappings, results, authS
   if ((workerAuth ?? []).some((entry) => !entry.ok)) {
     add(`${CLI_COMMAND_NAME} auth login --server-url ${serverUrl || "https://<your-domain>"}`);
   }
-  if (results.some((entry) => entry?.action === "needs_attention")) {
+  if (results.some((entry) => !entry?.legacy_worker_skill && entry?.action === "needs_attention")) {
     add(`${CLI_COMMAND_NAME} update`);
   }
   if (!projectMappings?.ok) {
@@ -1796,8 +1829,8 @@ async function handleDoctorCommand({
     stdout,
     clackUi,
     enabled: progressEnabled,
-    title: "Checking agent runtime support",
-    done: "Agent runtime support checked",
+    title: "Checking optional legacy worker skills",
+    done: "Optional legacy worker skills checked",
     task: () =>
       runSafeDoctorTarget("agent-runtimes", () =>
         inspectRuntimeWorkerSupportFn({
@@ -1807,9 +1840,11 @@ async function handleDoctorCommand({
       ),
   });
   results.push(
-    ...(Array.isArray(workerSupportResults)
-      ? workerSupportResults
-      : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...workerSupportResults, target }))),
+    ...markLegacyWorkerSkillResults(
+      Array.isArray(workerSupportResults)
+        ? workerSupportResults
+        : UPDATE_RUNTIME_TARGETS.map((target) => ({ ...workerSupportResults, target })),
+    ),
   );
 
   const runtimeHealthResults = await runProgressStep({
@@ -1903,7 +1938,7 @@ async function handleUpdateCommand({
   getHermesSkillStatusFn = getHermesSkillStatus,
   syncHermesSkillFn = syncHermesSkill,
   installOpenClawPluginFn = installOpenClawPlugin,
-  installRuntimeWorkerSupportFn = installRuntimeWorkerSupport,
+  inspectRuntimeWorkerSupportFn = inspectRuntimeWorkerSupport,
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
@@ -1955,16 +1990,15 @@ async function handleUpdateCommand({
     stdout,
     clackUi,
     enabled: progressEnabled,
-    title: "Updating agent runtime support",
-    done: "Agent runtime support updated",
+    title: "Checking optional legacy worker skills",
+    done: "Optional legacy worker skills checked",
     task: async () => {
       const entries = [];
       for (const runtime of UPDATE_RUNTIME_TARGETS) {
         const result = await runSafeUpdateTarget(runtime, async () => {
-          const [entry] = await installRuntimeWorkerSupportFn({
+          const [entry] = await inspectRuntimeWorkerSupportFn({
             runtimes: [runtime],
             env,
-            installMissing: false,
           });
           return entry;
         });
@@ -1973,7 +2007,7 @@ async function handleUpdateCommand({
       return entries;
     },
   });
-  results.push(...workerSupportResults);
+  results.push(...markLegacyWorkerSkillResults(workerSupportResults));
 
   const runtimeHealthResults = await runProgressStep({
     stdout,
@@ -2651,7 +2685,6 @@ export async function runDispatcherCli({
   installOpenClawPluginFn = installOpenClawPlugin,
   uninstallOpenClawPluginFn = uninstallOpenClawPlugin,
   inspectRuntimeWorkerSupportFn = inspectRuntimeWorkerSupport,
-  installRuntimeWorkerSupportFn = installRuntimeWorkerSupport,
   uninstallRuntimeWorkerSupportFn = uninstallRuntimeWorkerSupport,
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   inspectRuntimeMcpServersFn = inspectRuntimeMcpServers,
@@ -2770,7 +2803,7 @@ export async function runDispatcherCli({
         getHermesSkillStatusFn,
         syncHermesSkillFn,
         installOpenClawPluginFn,
-        installRuntimeWorkerSupportFn,
+        inspectRuntimeWorkerSupportFn,
         inspectRuntimeExecutableHealthFn,
         inspectRuntimeMcpServersFn,
         resolveDefaultPreqstationServerUrlFn,

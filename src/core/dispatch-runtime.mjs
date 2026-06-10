@@ -9,21 +9,14 @@ import { renderPrompt } from "../prompt-template.mjs";
 import { prepareWorktree } from "../worktree-runtime.mjs";
 import { launchDetached } from "../detached-launch.mjs";
 import { DispatchError, isDispatchError } from "../dispatch-error.mjs";
-import {
-  PREQSTATION_INSTRUCTIONS_FILE,
-  PREQSTATION_LEGACY_PROMPT_FILE,
-} from "../instruction-files.mjs";
+import { PREQSTATION_INSTRUCTIONS_FILE } from "../instruction-files.mjs";
 
 export {
   PREQSTATION_INSTRUCTIONS_FILE,
-  PREQSTATION_LEGACY_PROMPT_FILE,
 };
 
 export async function writeInstructionsFile({ cwd, instructions }) {
-  await Promise.all([
-    fs.writeFile(path.join(cwd, PREQSTATION_INSTRUCTIONS_FILE), instructions, "utf8"),
-    fs.writeFile(path.join(cwd, PREQSTATION_LEGACY_PROMPT_FILE), instructions, "utf8"),
-  ]);
+  await fs.writeFile(path.join(cwd, PREQSTATION_INSTRUCTIONS_FILE), instructions, "utf8");
 }
 
 export async function writePromptFile({ cwd, prompt }) {

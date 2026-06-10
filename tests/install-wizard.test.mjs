@@ -54,17 +54,17 @@ test("promptInstallPlan collects host and runtime selections with Clack prompt o
       {
         label: "Claude Code",
         value: "claude-code",
-        hint: "Install the PREQ Claude plugin and verify the CLI path",
+        hint: "Verify the Claude Code CLI path",
       },
       {
         label: "Codex",
         value: "codex",
-        hint: "Install the PREQ worker skill and verify the CLI path",
+        hint: "Verify the Codex CLI path",
       },
       {
         label: "Gemini CLI",
         value: "gemini-cli",
-        hint: "Install the PREQ worker skill and verify the CLI path",
+        hint: "Verify the Gemini CLI path",
       },
   ]);
   assert.equal(multiselectCalls[0].input.isTTY, true);
@@ -123,14 +123,6 @@ test("runInstallWizard executes selected host installs and runtime CLI setup wit
       calls.push(["hermes", env, force]);
       return { ok: true, target: "hermes", action: "installed" };
     },
-    installRuntimeWorkerSupportFn: async ({ env, runtimes }) => {
-      calls.push(["support", env, runtimes]);
-      return runtimes.map((runtime) => ({
-        ok: true,
-        target: runtime,
-        action: "installed",
-      }));
-    },
     inspectRuntimeExecutableHealthFn: async ({ env, runtimes, launchHosts }) => {
       calls.push(["runtime-cli", env, runtimes, launchHosts]);
       return runtimes.map((runtime) => ({
@@ -162,9 +154,7 @@ test("runInstallWizard executes selected host installs and runtime CLI setup wit
   assert.deepEqual(calls, [
     ["openclaw", { PATH: process.env.PATH }],
     ["hermes", { PATH: process.env.PATH }, true],
-    ["support", { PATH: process.env.PATH }, ["codex"]],
     ["runtime-cli", { PATH: process.env.PATH }, ["codex"], ["openclaw", "hermes"]],
-    ["support", { PATH: process.env.PATH }, ["gemini-cli"]],
     ["runtime-cli", { PATH: process.env.PATH }, ["gemini-cli"], ["openclaw", "hermes"]],
   ]);
   assert.deepEqual(taskGroups, [
@@ -175,9 +165,7 @@ test("runInstallWizard executes selected host installs and runtime CLI setup wit
     [
       "Agent runtimes",
       [
-        "Install Codex worker support",
         "Check Codex CLI",
-        "Install Gemini CLI worker support",
         "Check Gemini CLI",
       ],
     ],
@@ -185,26 +173,24 @@ test("runInstallWizard executes selected host installs and runtime CLI setup wit
   assert.deepEqual(taskLabels, [
     "OpenClaw is installed",
     "Hermes Agent is installed",
-    "Codex skill is installed",
     "Codex CLI is ready",
-    "Gemini CLI skill is installed",
     "Gemini CLI needs attention",
   ]);
   assert.deepEqual(result.install_targets, ["openclaw", "hermes"]);
   assert.deepEqual(result.runtime_engines, ["codex", "gemini-cli"]);
   assert.equal(result.with_mcp, false);
   assert.equal(result.mcp_url, null);
-  assert.equal(result.results.length, 6);
+  assert.equal(result.results.length, 4);
   assert.match(output.join(""), /PREQSTATION server URL/);
   assert.match(output.join(""), /https:\/\/preq\.example\.com/);
   assert.match(output.join(""), /Request entrypoints/);
   assert.match(output.join(""), /OpenClaw\s+installed/);
   assert.match(output.join(""), /Hermes Agent\s+installed/);
   assert.match(output.join(""), /Agent runtimes/);
-  assert.match(output.join(""), /Codex skill\s+installed/);
+  assert.doesNotMatch(output.join(""), /Codex skill\s+installed/);
   assert.match(output.join(""), /Codex CLI\s+ready/);
   assert.doesNotMatch(output.join(""), /Codex MCP\s+registered/);
-  assert.match(output.join(""), /Gemini CLI skill\s+installed/);
+  assert.doesNotMatch(output.join(""), /Gemini CLI skill\s+installed/);
   assert.match(output.join(""), /Gemini CLI\s+attention/);
   assert.match(output.join(""), /OpenClaw dispatches may not inherit/);
   assert.doesNotMatch(output.join(""), /Gemini CLI MCP\s+registered/);
@@ -272,13 +258,6 @@ test("runInstallWizard renders a Clack install surface for TTY output", async ()
       target: "hermes",
       action: "already_current",
     }),
-    installRuntimeWorkerSupportFn: async () => [
-      {
-        ok: true,
-        target: "codex",
-        action: "installed",
-      },
-    ],
     inspectRuntimeExecutableHealthFn: async () => [
       {
         ok: true,
@@ -318,10 +297,7 @@ test("runInstallWizard renders a Clack install surface for TTY output", async ()
     ["Hermes Agent", "current", true, "auto", true, "x"],
     [
       "Codex",
-      [
-        "skill installed",
-        "CLI ready",
-      ].join("\n"),
+      "CLI ready",
       true,
       "auto",
       true,
@@ -371,13 +347,6 @@ test("runInstallWizard themes service summary box borders", async () => {
       action: "already_current",
       version: "0.1.35",
     }),
-    installRuntimeWorkerSupportFn: async ({ runtimes }) =>
-      runtimes.map((runtime) => ({
-        ok: true,
-        target: runtime,
-        action: "already_current",
-        installed_version: "0.1.45",
-      })),
     inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
       runtimes.map((runtime) => ({
         ok: true,
@@ -451,12 +420,6 @@ test("runInstallWizard themes install plan service names", async () => {
       target: "hermes",
       action: "already_current",
     }),
-    installRuntimeWorkerSupportFn: async ({ runtimes }) =>
-      runtimes.map((runtime) => ({
-        ok: true,
-        target: runtime,
-        action: "already_current",
-      })),
     inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
       runtimes.map((runtime) => ({
         ok: true,
@@ -528,13 +491,6 @@ test("runInstallWizard reports when an MCP runtime is already configured", async
       preqstationServerUrl: "https://preq.example.com",
       mcpUrl: "https://preq.example.com/mcp",
     }),
-    installRuntimeWorkerSupportFn: async () => [
-      {
-        ok: true,
-        target: "claude-code",
-        action: "already_current",
-      },
-    ],
     installRuntimeMcpServersFn: async () => [
       {
         ok: true,
@@ -544,7 +500,8 @@ test("runInstallWizard reports when an MCP runtime is already configured", async
     ],
   });
 
-  assert.match(output.join(""), /Claude Code plugin\s+current/);
+  assert.doesNotMatch(output.join(""), /Claude Code plugin\s+current/);
+  assert.match(output.join(""), /Claude Code CLI\s+ready/);
   assert.match(output.join(""), /Claude Code legacy MCP\s+current/);
 });
 
@@ -576,7 +533,7 @@ test("runInstallWizard reports already current host installs without pretending 
   assert.match(output.join(""), /Hermes Agent\s+current/);
 });
 
-test("runInstallWizard reports failure when runtime support post-check does not stick", async () => {
+test("runInstallWizard reports failure when runtime executable health fails", async () => {
   const output = [];
 
   const result = await runInstallWizard({
@@ -588,22 +545,15 @@ test("runInstallWizard reports failure when runtime support post-check does not 
       preqstationServerUrl: "https://preq.example.com",
       mcpUrl: "https://preq.example.com/mcp",
     }),
-    installRuntimeWorkerSupportFn: async () => [
+    inspectRuntimeExecutableHealthFn: async () => [
       {
         ok: false,
         target: "codex",
-        action: "failed",
-        error: "preqstation skill did not become enabled for Codex after install",
-      },
-    ],
-    inspectRuntimeExecutableHealthFn: async () => [
-      {
-        ok: true,
-        target: "codex",
         category: "runtime_executable",
-        action: "ready",
+        action: "failed",
         executable: "codex",
         resolved_path: "/Users/kendrick/.local/bin/codex",
+        error: "codex command failed",
       },
     ],
     installRuntimeMcpServersFn: async () => [
@@ -616,5 +566,5 @@ test("runInstallWizard reports failure when runtime support post-check does not 
   });
 
   assert.equal(result.ok, false);
-  assert.match(output.join(""), /Codex skill\s+failed/);
+  assert.match(output.join(""), /Codex CLI\s+failed/);
 });

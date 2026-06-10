@@ -6,12 +6,11 @@ import path from "node:path";
 
 import {
   PREQSTATION_INSTRUCTIONS_FILE,
-  PREQSTATION_LEGACY_PROMPT_FILE,
   dispatchPreqRun,
   writeInstructionsFile,
 } from "../src/core/dispatch-runtime.mjs";
 
-test("writeInstructionsFile writes canonical and legacy instruction files", async () => {
+test("writeInstructionsFile writes only the canonical instruction file", async () => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-instructions-"));
 
   await writeInstructionsFile({ cwd, instructions: "instruction text" });
@@ -20,9 +19,9 @@ test("writeInstructionsFile writes canonical and legacy instruction files", asyn
     await fs.readFile(path.join(cwd, PREQSTATION_INSTRUCTIONS_FILE), "utf8"),
     "instruction text",
   );
-  assert.equal(
-    await fs.readFile(path.join(cwd, PREQSTATION_LEGACY_PROMPT_FILE), "utf8"),
-    "instruction text",
+  await assert.rejects(
+    fs.access(path.join(cwd, ".preqstation-prompt.txt")),
+    /ENOENT/u,
   );
 });
 

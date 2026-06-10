@@ -13,8 +13,6 @@ codex --ask-for-approval never exec --sandbox danger-full-access "Read and execu
 
 Claude Code and Gemini CLI use the same bootstrap idea with their own binaries.
 
-During the compatibility window, dispatch also writes `.preqstation-prompt.txt` with identical content for older installed worker skills. New detached bootstrap commands read `.preqstation-instructions.txt`.
-
 Generated instructions are CLI-first. Detached workers use the absolute CLI path rendered into `.preqstation-instructions.txt` for PREQ lifecycle reads and mutations.
 
 Before launch, the dispatcher checks CLI auth readiness against the detached worker environment, including worker `HOME`, `~/.preqstation-dispatch/config.json`, `oauth.json`, `PREQSTATION_SERVER_URL`, and `PREQSTATION_TOKEN`. A custom `PREQSTATION_WORKER_HOME` or engine-specific worker home needs its own `preqstation auth login --server-url ...`, unless a token and server URL are passed through the environment.

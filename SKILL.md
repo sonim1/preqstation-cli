@@ -59,9 +59,9 @@ Model overrides are optional. Omit `model`/`--model`, or pass `default`, to pres
 
 Interactive `preqstation install` runs that setup automatically and persists the CLI server URL config.
 
-`preqstation update` refreshes installed entrypoints/runtime support and then runs the same project setup.
+`preqstation update` refreshes installed entrypoints, checks runtime CLI paths plus optional legacy worker skills, and then runs the same project setup.
 
-Interactive `preqstation uninstall` removes selected request entrypoints, runtime registrations, and runtime worker support while keeping project mappings and OAuth cache data.
+Interactive `preqstation uninstall` removes selected request entrypoints, legacy runtime MCP registrations, and legacy worker support while keeping project mappings and OAuth cache data.
 
 Hermes Telegram messages should lead to `preqstation`; they should not implement the PREQ task inside the Hermes chat run.
 
@@ -69,7 +69,7 @@ Hermes Telegram messages should lead to `preqstation`; they should not implement
 
 1. Dispatcher only. Never implement the task inside the OpenClaw or Hermes trigger run.
 2. Worktree isolation only. Never launch in the primary checkout.
-3. Instructions via file only. Always write `.preqstation-instructions.txt` into the worktree first. During the compatibility window, also write `.preqstation-prompt.txt` with identical content for older installed skills.
+3. Instructions via file only. Always write `.preqstation-instructions.txt` into the worktree first.
 4. Detached launch only. Do not use `pty:true` / `background:true` for the coding run.
 5. If dispatch fails after the message was clearly intended for PREQ, return a clear handled failure instead of falling back to a generic LLM reply.
 6. Do not put local project paths into PREQ server payloads or Telegram messages. Local paths belong only to the dispatcher host.

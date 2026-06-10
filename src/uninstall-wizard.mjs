@@ -29,17 +29,17 @@ const RUNTIME_CHOICES = [
   {
     name: "Claude Code",
     value: "claude-code",
-    description: "Remove the PREQ Claude plugin and MCP registration",
+    description: "Remove legacy PREQ Claude plugin and MCP registration",
   },
   {
     name: "Codex",
     value: "codex",
-    description: "Remove the PREQ worker skill and MCP registration",
+    description: "Remove legacy PREQ worker skill and MCP registration",
   },
   {
     name: "Gemini CLI",
     value: "gemini-cli",
-    description: "Remove the PREQ worker skill and MCP registration",
+    description: "Remove legacy PREQ worker skill and MCP registration",
   },
 ];
 
@@ -247,7 +247,7 @@ export async function runUninstallWizard({
       },
     },
     {
-      title: `Remove ${describeTarget(runtime)} worker support`,
+      title: `Remove ${describeTarget(runtime)} legacy worker support`,
       task: async () => {
         const [result] = await uninstallRuntimeWorkerSupportFn({ env, runtimes: [runtime] });
         runtimeResults.push(result);

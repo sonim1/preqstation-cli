@@ -343,7 +343,7 @@ test("install summary surfaces when the local repo is newer than the published O
   assert.match(plain, /OpenClaw\s+current\s+0\.1\.21, restart: openclaw gateway restart, local repo: 0\.1\.24 unpublished/);
 });
 
-test("install returns a non-zero exit code when the interactive wizard reports failed runtime setup", async () => {
+test("install returns a non-zero exit code when the interactive wizard reports failed runtime CLI setup", async () => {
   const stdout = [];
 
   const exitCode = await runDispatcherCli({
@@ -506,8 +506,8 @@ test("update refreshes installed surfaces without installing missing ones", asyn
       package_version: "0.1.22",
       restart_command: "openclaw gateway restart",
     }),
-    installRuntimeWorkerSupportFn: async ({ runtimes, installMissing }) => {
-      runtimeCalls.push({ runtimes, installMissing });
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) => {
+      runtimeCalls.push({ runtimes });
       const [runtime] = runtimes;
       if (runtime === "claude-code") {
         return [{ ok: true, target: runtime, action: "already_current", installed_version: "0.1.38" }];
@@ -613,9 +613,9 @@ test("update refreshes installed surfaces without installing missing ones", asyn
   assert.deepEqual(result.host_targets, ["openclaw", "hermes"]);
   assert.deepEqual(result.runtime_engines, ["claude-code", "codex", "gemini-cli"]);
   assert.deepEqual(runtimeCalls, [
-    { runtimes: ["claude-code"], installMissing: false },
-    { runtimes: ["codex"], installMissing: false },
-    { runtimes: ["gemini-cli"], installMissing: false },
+    { runtimes: ["claude-code"] },
+    { runtimes: ["codex"] },
+    { runtimes: ["gemini-cli"] },
   ]);
   assert.deepEqual(runtimeExecutableCalls, [
     { runtimes: ["claude-code"], launchHosts: ["openclaw", "hermes"] },
@@ -678,7 +678,7 @@ test("update runs setup auto from PREQ projects after refreshing installed surfa
       target: "openclaw",
       action: "not_installed",
     }),
-    installRuntimeWorkerSupportFn: async ({ runtimes }) => [
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) => [
       { ok: true, target: runtimes[0], action: "not_installed" },
     ],
     inspectRuntimeExecutableHealthFn: async ({ runtimes }) => [
@@ -760,7 +760,7 @@ test("update renders a friendly summary for interactive tty output", async () =>
       action: "not_installed",
       package_version: "0.1.22",
     }),
-    installRuntimeWorkerSupportFn: async ({ runtimes }) => {
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) => {
       const [runtime] = runtimes;
       if (runtime === "claude-code") {
         return [{ ok: true, target: runtime, action: "unavailable", error: "claude command not found" }];
@@ -881,13 +881,13 @@ test("update renders a friendly summary for interactive tty output", async () =>
   assert.match(plain, /OpenClaw\s+not installed/);
   assert.match(plain, /Hermes Agent\s+current\s+0\.1\.22/);
   assert.match(plain, /Agent runtimes/);
-  assert.match(plain, /Claude Code\s+unavailable\s+plugin unavailable claude command not found, CLI ready \/Users\/kendrick\/\.local\/bin\/claude/);
-  assert.match(plain, /Codex\s+updated\s+skill updated 0\.1\.37 -> 0\.1\.38, CLI ready \/Users\/kendrick\/\.local\/bin\/codex/);
-  assert.match(plain, /Gemini CLI\s+attention\s+skill not enabled 0\.1\.38, installed globally, not enabled for Gemini CLI, CLI attention/);
+  assert.match(plain, /Claude Code\s+ready\s+plugin optional optional worker skill, claude command not found, CLI ready \/Users\/kendrick\/\.local\/bin\/claude/);
+  assert.match(plain, /Codex\s+ready\s+skill legacy 0\.1\.37 -> 0\.1\.38, optional worker skill, CLI ready \/Users\/kendrick\/\.local\/bin\/codex/);
+  assert.match(plain, /Gemini CLI\s+attention\s+skill optional 0\.1\.38, installed globally, not enabled for Gemini CLI, optional worker skill, CLI attention/);
   assert.doesNotMatch(plain, /Claude Code CLI\s+ready/);
   assert.doesNotMatch(plain, /Codex CLI\s+ready/);
   assert.match(plain, /\/Users\/kendrick\/\.local\/state\/fnm_multishells\/12345\/bin\/gemini/);
-  assert.match(plain, /stable path:[\s\S]*\/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini/);
+  assert.match(plain, /stable[\s\S]*path:[\s\S]*\/Users\/kendrick\/\.local\/share\/fnm\/node-versions\/v24\.13\.0\/installation\/bin\/gemini/);
   assert.match(plain, /OpenClaw, Hermes[\s\S]*Agent dispatches may not/);
   assert.match(plain, /Legacy MCP/);
   assert.match(plain, /Claude Code legacy MCP\s+configured\s+https:\/\/preq\.example\.com\/mcp, status: Connected/);
@@ -955,7 +955,7 @@ test("update reports an interactive plan and progress steps", async () => {
       target: "openclaw",
       action: "not_installed",
     }),
-    installRuntimeWorkerSupportFn: async ({ runtimes }) => [
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) => [
       { ok: true, target: runtimes[0], action: "not_installed" },
     ],
     inspectRuntimeExecutableHealthFn: async ({ runtimes }) => [
@@ -978,13 +978,13 @@ test("update reports an interactive plan and progress steps", async () => {
   assert.equal(notes[0].title, "Update plan");
   assert.equal(notes[0].output.isTTY, true);
   assert.match(notes[0].body, /Refresh installed request entrypoints/);
-  assert.match(notes[0].body, /Update installed agent runtime support/);
+  assert.match(notes[0].body, /Check optional legacy worker skills/);
   assert.match(notes[0].body, /Refresh project mappings from PREQ MCP/);
   assert.deepEqual(progress, [
     ["start", "Refreshing request entrypoints"],
     ["stop", "Request entrypoints refreshed"],
-    ["start", "Updating agent runtime support"],
-    ["stop", "Agent runtime support updated"],
+    ["start", "Checking optional legacy worker skills"],
+    ["stop", "Optional legacy worker skills checked"],
     ["start", "Checking agent CLI paths"],
     ["stop", "Agent CLI paths checked"],
     ["start", "Checking legacy MCP registrations"],

@@ -32,7 +32,7 @@ Legacy MCP cleanup:
 - `preqstation mcp disable codex`
 - `preqstation mcp disable gemini-cli`
 
-`mcp disable` removes only the native PREQ MCP registration for that runtime. It leaves worker support and skills installed.
+`mcp disable` removes only the native PREQ MCP registration for that runtime. Use `preqstation uninstall <runtime>` when you also want to remove legacy worker support or skills.
 
 Lifecycle CLI commands:
 

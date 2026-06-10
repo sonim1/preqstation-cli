@@ -13,10 +13,7 @@ import {
 
 import { syncHermesSkill } from "./hermes-skill-installer.mjs";
 import { installOpenClawPlugin } from "./openclaw-installer.mjs";
-import {
-  inspectRuntimeExecutableHealth,
-  installRuntimeWorkerSupport,
-} from "./runtime-skill-installer.mjs";
+import { inspectRuntimeExecutableHealth } from "./runtime-skill-installer.mjs";
 import {
   buildPreqstationMcpUrl,
   installRuntimeMcpServers,
@@ -41,17 +38,17 @@ const RUNTIME_CHOICES = [
   {
     name: "Claude Code",
     value: "claude-code",
-    description: "Install the PREQ Claude plugin and verify the CLI path",
+    description: "Verify the Claude Code CLI path",
   },
   {
     name: "Codex",
     value: "codex",
-    description: "Install the PREQ worker skill and verify the CLI path",
+    description: "Verify the Codex CLI path",
   },
   {
     name: "Gemini CLI",
     value: "gemini-cli",
-    description: "Install the PREQ worker skill and verify the CLI path",
+    description: "Verify the Gemini CLI path",
   },
 ];
 
@@ -342,20 +339,7 @@ function formatHostSummaryResult(result) {
     .join(" ");
 }
 
-function runtimeSupportLabel(runtime) {
-  return `${describeRuntime(runtime)} ${runtime === "claude-code" ? "plugin" : "skill"}`;
-}
-
-function runtimeSupportSummaryLabel(runtime) {
-  return runtime === "claude-code" ? "plugin" : "skill";
-}
-
 function formatRuntimeTaskResult({ runtime, kind, result, mcpUrl }) {
-  if (kind === "support") {
-    return joinProgressTaskLabel(runtimeSupportLabel(runtime), describeRuntimeSupportAction(result?.action, runtime), [
-      describeResultVersion(result ?? {}),
-    ]);
-  }
   if (kind === "executable") {
     return joinProgressTaskLabel(describeRuntimeCli(runtime), describeRuntimeSupportAction(result?.action, runtime));
   }
@@ -367,13 +351,6 @@ function formatRuntimeTaskResult({ runtime, kind, result, mcpUrl }) {
 }
 
 function formatRuntimeSummaryTaskResult({ runtime, kind, result, mcpUrl }) {
-  if (kind === "support") {
-    return joinTaskLabel(
-      runtimeSupportSummaryLabel(runtime),
-      describeRuntimeSupportAction(result?.action, runtime),
-      [describeResultVersion(result ?? {})],
-    );
-  }
   if (kind === "executable") {
     return joinTaskLabel("CLI", describeRuntimeSupportAction(result?.action, runtime));
   }
@@ -625,7 +602,6 @@ export async function runInstallWizard({
   promptInstallPlanFn = promptInstallPlan,
   syncHermesSkillFn = syncHermesSkill,
   installOpenClawPluginFn = installOpenClawPlugin,
-  installRuntimeWorkerSupportFn = installRuntimeWorkerSupport,
   inspectRuntimeExecutableHealthFn = inspectRuntimeExecutableHealth,
   installRuntimeMcpServersFn = installRuntimeMcpServers,
   clackUi = DEFAULT_CLACK_UI,
@@ -726,39 +702,6 @@ export async function runInstallWizard({
     for (const runtime of plan.runtimeEngines) {
       runtimeSteps.push({
         runtime,
-        kind: "support",
-        title: `Install ${describeRuntime(runtime)} worker support`,
-        summaryGroup: createSummaryGroup(runtime),
-        task: () =>
-          installRuntimeWorkerSupportFn({
-            env,
-            runtimes: [runtime],
-          }),
-        format: (runtimeSupportResults) =>
-          formatRuntimeTaskResult({
-            runtime,
-            kind: "support",
-            result: runtimeSupportResults[0],
-            mcpUrl: plan.mcpUrl,
-          }),
-        logFormat: (runtimeSupportResults) =>
-          formatRuntimeTaskResult({
-            runtime,
-            kind: "support",
-            result: runtimeSupportResults[0],
-            mcpUrl: plan.mcpUrl,
-          }),
-        summaryFormat: (runtimeSupportResults) =>
-          formatRuntimeSummaryTaskResult({
-            runtime,
-            kind: "support",
-            result: runtimeSupportResults[0],
-            mcpUrl: plan.mcpUrl,
-          }),
-      });
-
-      runtimeSteps.push({
-        runtime,
         kind: "executable",
         title: `Check ${describeRuntimeCli(runtime)}`,
         summaryGroup: createSummaryGroup(runtime),
@@ -845,13 +788,7 @@ export async function runInstallWizard({
         continue;
       }
 
-      if (step.kind === "support") {
-        writeStatusRow(
-          outputStream,
-          `${describeRuntime(step.runtime)} ${step.runtime === "claude-code" ? "plugin" : "skill"}`,
-          describeRuntimeSupportAction(runtimeResult?.action, step.runtime),
-        );
-      } else if (step.kind === "executable") {
+      if (step.kind === "executable") {
         writeStatusRow(
           outputStream,
           describeRuntimeCli(step.runtime),

@@ -232,14 +232,72 @@ test("status reports interactive progress while checking install state", async (
     ["stop", "Worker CLI auth checked"],
     ["start", "Checking request entrypoints"],
     ["stop", "Request entrypoints checked"],
-    ["start", "Checking agent runtime support"],
-    ["stop", "Agent runtime support checked"],
+    ["start", "Checking optional legacy worker skills"],
+    ["stop", "Optional legacy worker skills checked"],
     ["start", "Checking agent CLI paths"],
     ["stop", "Agent CLI paths checked"],
     ["start", "Checking legacy MCP registrations"],
     ["stop", "Legacy MCP registrations checked"],
   ]);
   assert.match(stdout.join(""), /Status summary/);
+});
+
+test("status treats worker skills as optional legacy support", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-status-legacy-skills-"));
+  const projectPath = path.join(tempDir, "project");
+  const mappingPath = path.join(tempDir, "projects.json");
+  await fs.mkdir(projectPath);
+  await fs.writeFile(mappingPath, `${JSON.stringify({ projects: { PROJ: projectPath } })}\n`);
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["status", "--json"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: { PREQSTATION_PROJECTS_FILE: mappingPath, PREQSTATION_TOKEN: "test-token" },
+    inspectOpenClawPluginFn: async () => ({
+      ok: true,
+      target: "openclaw",
+      action: "already_current",
+    }),
+    getHermesSkillStatusFn: async () => ({
+      ok: true,
+      target: "hermes",
+      installed: true,
+      current: true,
+    }),
+    inspectRuntimeWorkerSupportFn: async ({ runtimes }) =>
+      runtimes.map((runtime, index) => ({
+        ok: true,
+        target: runtime,
+        action: index === 0 ? "not_installed" : index === 1 ? "needs_attention" : "already_current",
+        installed_version: index === 1 ? "0.1.45" : null,
+        latest_version: index === 1 ? "0.1.46" : null,
+      })),
+    inspectRuntimeExecutableHealthFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({
+        ok: true,
+        target: runtime,
+        category: "runtime_executable",
+        action: "ready",
+        resolved_path: `/usr/local/bin/${runtime}`,
+      })),
+    inspectRuntimeMcpServersFn: async ({ runtimes }) =>
+      runtimes.map((runtime) => ({ ok: true, target: runtime, action: "mcp_missing" })),
+    resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
+    dispatchPreqRun: async () => {
+      throw new Error("status must not dispatch");
+    },
+  });
+
+  const result = JSON.parse(stdout.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.recommendations, []);
+  assert.equal(
+    result.results.filter((entry) => entry.legacy_worker_skill).length,
+    3,
+  );
 });
 
 test("doctor reports read-only dispatcher health as json", async () => {

@@ -38,11 +38,11 @@ This repository is the durable public PREQ CLI and dispatcher surface for PreqSt
 - `src/adapters/openclaw/` owns the OpenClaw `before_dispatch` hook and `/preqstation`
 - `src/adapters/hermes/` owns optional Hermes payload normalization for deferred webhook experiments
 
-OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`. [`preqstation-skill`](https://github.com/sonim1/preqstation-skill) remains the worker lifecycle package used by Claude Code, Codex CLI, and Gemini CLI after dispatch.
+OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`. Worker lifecycle actions now run through the `preqstation` CLI rendered into `.preqstation-instructions.txt`; [`preqstation-skill`](https://github.com/sonim1/preqstation-skill) is legacy optional worker support that `status`, `doctor`, `update`, and `uninstall` can inspect or clean up.
 
 ## What It Does
 
-The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-instructions.txt`, and launches the selected engine as a detached process, including detached Codex runs. During the compatibility window it also writes the legacy `.preqstation-prompt.txt` filename with identical content for older installed skills. This is intentionally not the old PTY/background session model: it does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
+The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-instructions.txt`, and launches the selected engine as a detached process, including detached Codex runs. This is intentionally not the old PTY/background session model: it does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
 
 Supported engines:
 
@@ -79,7 +79,7 @@ npx -y @sonim1/preqstation@latest status
 | `preqstation setup auto` | Discover local projects and save shared PREQ project mappings. |
 | `preqstation mcp disable codex` | Remove only a legacy PREQ MCP registration for a runtime. |
 | `preqstation run` | Dispatch a PREQ task or project objective directly from the CLI. |
-| `preqstation uninstall` | Remove installed entrypoints, runtime support, or project mappings. |
+| `preqstation uninstall` | Remove installed entrypoints, legacy worker support, legacy MCP, or project mappings. |
 
 ## Documentation
 
