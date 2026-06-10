@@ -2,9 +2,11 @@
 
 ## Summary
 
-This document explains what was broken in the original OpenClaw PREQ dispatch flow, why it failed specifically in Telegram-driven runs, what we changed in the `preqstation-dispatcher` plugin, and how the new model works today.
+This historical retrospective explains what was broken in the original OpenClaw PREQ dispatch flow, why it failed specifically in Telegram-driven runs, what we changed in the `preqstation-dispatcher` plugin, and how that model evolved.
 
 This is written as a blog-ready retrospective and implementation note.
+
+Current CLI-first dispatch uses `@sonim1/preqstation`, shared state under `~/.preqstation`, and `.preqstation-instructions.txt` as the worker instruction file. References below to `.preqstation-prompt.txt` describe the old implementation or the migration history, not the current worker contract.
 
 ## The Problem
 
@@ -211,10 +213,10 @@ Today the OpenClaw side behaves like this:
 2. `preqstation-dispatcher` intercepts it in `before_dispatch`
 3. the plugin resolves the project path
 4. it creates or reuses the task worktree
-5. it writes `.preqstation-prompt.txt`
+5. it writes `.preqstation-instructions.txt`
 6. it creates a managed Task Flow record
 7. it launches the coding CLI as a detached local process
-8. PREQ lifecycle calls happen inside the worker run from the prompt contract
+8. PREQ lifecycle calls happen inside the worker run through the CLI contract rendered into the instruction file
 
 This is much closer to the actual mental model we wanted from the beginning:
 
@@ -255,7 +257,7 @@ Then verify:
 When a dispatch starts, the main artifacts are:
 
 - worktree under `~/.openclaw-preq-worktrees/...`
-- `.preqstation-prompt.txt`
+- `.preqstation-instructions.txt`
 - `.preqstation-dispatch/<engine>.pid`
 - `.preqstation-dispatch/<engine>.log`
 
@@ -301,9 +303,9 @@ Once dispatch moved into the plugin, path setup became the next bottleneck. Solv
 
 A command format that looks nicer in a README is not automatically the right format for a real Telegram/OpenClaw command path.
 
-## Current State
+## Historical Current State At Original Write-Up
 
-As of this write-up, the OpenClaw dispatch surface supports:
+At the time of the original write-up, the OpenClaw dispatch surface supported:
 
 - native `before_dispatch` interception
 - detached CLI launch

@@ -12,16 +12,16 @@ After install, check the current machine:
 npx -y @sonim1/preqstation@latest status
 ```
 
-The installer is idempotent. Existing runtime support is reported as current, older installs are updated in place, matching MCP endpoints are reported as configured, and project setup shows which PREQ projects were mapped or unmatched.
+The installer is idempotent. Existing entrypoints and runtime CLI paths are reported as current, older installs are updated in place, optional legacy MCP endpoints are reported as configured only when requested, and project setup shows which PREQ projects were mapped or unmatched.
 
 ## What Install Configures
 
 `preqstation install` can configure:
 
 - request entrypoints: OpenClaw and Hermes Agent
-- worker runtime support: Claude Code, Codex, and Gemini CLI
-- runtime MCP registrations for PREQSTATION
-- local project mappings through MCP-backed `setup auto`
+- runtime CLI path verification for Claude Code, Codex, and Gemini CLI
+- local project mappings through `setup auto`
+- optional legacy PREQ MCP registrations when `--with-mcp` is used
 
 Hermes must have terminal/tool execution enabled. A chat-only Hermes profile cannot create worktrees or launch local worker CLIs.
 
@@ -37,13 +37,13 @@ preqstation status
 
 ## Update
 
-Refresh installed entrypoints and runtime support:
+Refresh installed entrypoints and runtime CLI checks:
 
 ```bash
 preqstation update
 ```
 
-`preqstation update` refreshes only what is already installed. It does not install missing targets, but it does rerun MCP-backed `setup auto` so local project mappings stay in sync with PREQSTATION.
+`preqstation update` refreshes only what is already installed. It does not install missing targets, but it does rerun `setup auto` so local project mappings stay in sync with PREQSTATION.
 
 ## Status And Doctor
 
@@ -51,9 +51,9 @@ preqstation update
 
 - PREQSTATION server URL and MCP endpoint
 - OpenClaw and Hermes Agent entrypoints
-- Claude Code, Codex, and Gemini CLI worker support
+- Claude Code, Codex, and Gemini CLI runtime CLI availability
 - CLI executable paths, including session-scoped `fnm` path warnings
-- runtime MCP registrations
+- optional legacy runtime MCP registrations
 - shared project mappings and missing local paths
 
 Use JSON output for scripts:
@@ -71,7 +71,7 @@ Remove selected installed surfaces:
 preqstation uninstall
 ```
 
-`preqstation uninstall` opens the matching removal wizard. It removes selected request entrypoints, runtime MCP registrations, and runtime worker support, but keeps `~/.preqstation-dispatch/projects.json` and OAuth cache data.
+`preqstation uninstall` opens the matching removal wizard. It removes selected request entrypoints, optional legacy runtime MCP registrations, and optional legacy worker support, but keeps `~/.preqstation/projects.json` and OAuth cache data.
 
 Use targeted uninstall commands when needed:
 
@@ -133,7 +133,7 @@ Useful setup commands:
 
 `/preqstation setup auto` scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`, matches local git `origin` URLs against provided repo URLs, and stores successful matches in OpenClaw plugin config.
 
-If another runtime already populated `~/.preqstation-dispatch/projects.json`, OpenClaw can reuse it with `/preqstation setup import`.
+If another runtime already populated shared mappings, OpenClaw can reuse `~/.preqstation/projects.json` with `/preqstation setup import`. Legacy `~/.preqstation-dispatch/projects.json` is read only as an import fallback.
 
 ## Hermes Agent
 
@@ -143,7 +143,13 @@ To install only the Hermes entrypoint:
 preqstation install hermes
 ```
 
-`preqstation install hermes` copies the bundled `preqstation` Hermes skill into `~/.hermes/skills/preqstation/preqstation/SKILL.md` and writes provenance metadata next to it. Existing legacy `preqstation_dispatch` and `preq_dispatch` installs are removed automatically when they were previously managed by this package.
+`preqstation install hermes` copies the bundled `preqstation_dispatch` Hermes skill into `~/.hermes/skills/preqstation/preqstation_dispatch/SKILL.md` and writes provenance metadata next to it. Existing legacy `preqstation` and `preq_dispatch` installs are removed automatically when they were previously managed by this package.
+
+When the CLI summary reports `restart: hermes gateway restart`, restart Hermes so the gateway reloads the updated skill:
+
+```bash
+hermes gateway restart
+```
 
 After upgrading the npm package, sync the installed Hermes skill when needed:
 
@@ -155,6 +161,8 @@ preqstation status hermes
 
 If the local Hermes skill was edited, `sync hermes` refuses to overwrite it. Use `preqstation sync hermes --force` to back up the current `SKILL.md` and replace it with the bundled version.
 
+Run `hermes gateway restart` after `sync hermes` when the CLI summary includes the restart hint.
+
 ## Project Setup
 
 The default installer runs project setup for you. You can rerun it directly:
@@ -163,7 +171,7 @@ The default installer runs project setup for you. You can rerun it directly:
 preqstation setup auto
 ```
 
-`setup auto` without repo hints fetches PREQ projects from the configured remote `/mcp` endpoint with OAuth, then scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`. It matches local git `origin` URLs against PREQ project repo URLs and stores successful matches in `~/.preqstation-dispatch/projects.json`.
+`setup auto` without repo hints fetches PREQ projects from the configured PREQSTATION endpoint with OAuth, then scans local git repos under `PREQSTATION_REPO_ROOTS` when set, otherwise under `~/projects`. It matches local git `origin` URLs against PREQ project repo URLs and stores successful matches in `~/.preqstation/projects.json`.
 
 Explicit repo hints are still supported:
 
@@ -209,6 +217,6 @@ Omitting the model, or using `model=default`, keeps the existing default behavio
 Install a local checkout into OpenClaw while working on this repository:
 
 ```bash
-openclaw plugins install --link --dangerously-force-unsafe-install /path/to/preqstation-dispatcher
+openclaw plugins install --link --dangerously-force-unsafe-install /path/to/preqstation-cli
 openclaw gateway restart
 ```

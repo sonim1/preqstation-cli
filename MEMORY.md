@@ -1,8 +1,8 @@
 # MEMORY
 
-Default project mapping file for the local `preqstation-dispatcher` plugin.
+Legacy sample project mapping file for old local `preqstation-dispatcher` plugin installs.
 
-Right now the plugin reads this file by default unless `plugins.entries.preqstation-dispatcher.config.memoryPath` points somewhere else.
+The current shared mapping file is `~/.preqstation/projects.json`, managed by `preqstation setup auto`, `preqstation setup set`, and host-specific setup commands. This file remains only as an example/fallback for older plugin configurations that still set `plugins.entries.preqstation-dispatcher.config.memoryPath`.
 
 ## Projects
 

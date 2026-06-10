@@ -14,8 +14,8 @@
   <a href="https://preqstation.com">Website</a> ·
   <a href="https://preqstation.com/guide">Guide</a> ·
   <a href="https://github.com/sonim1/preqstation">Core App</a> ·
-  <a href="https://github.com/sonim1/preqstation-dispatcher">PREQ CLI</a> ·
-  <a href="https://github.com/sonim1/preqstation-skill">Worker Skill</a>
+  <a href="https://github.com/sonim1/preqstation-cli">PREQ CLI</a> ·
+  <a href="https://github.com/sonim1/preqstation-skill">Legacy Worker Skill</a>
 </p>
 
 <p align="center">

@@ -31,12 +31,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sonim1/preqstation-dispatcher.git"
+    "url": "git+https://github.com/sonim1/preqstation-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/sonim1/preqstation-dispatcher/issues"
+    "url": "https://github.com/sonim1/preqstation-cli/issues"
   },
-  "homepage": "https://github.com/sonim1/preqstation-dispatcher#readme",
+  "homepage": "https://github.com/sonim1/preqstation-cli#readme",
   "openclaw": {
     "extensions": [
       "./index.mjs"

@@ -13,8 +13,8 @@ Environment variables:
 - `PREQSTATION_GEMINI_HOME`: optional Gemini-specific worker home override
 - `PREQSTATION_MEMORY_PATH`: optional legacy markdown mapping fallback
 - `PREQSTATION_REPO_ROOTS`: optional path-delimited roots for `setup auto`
-- `PREQSTATION_SERVER_URL` or `PREQSTATION_API_URL`: optional PREQSTATION server URL for `install`, `update`, and MCP-backed `setup auto`
-- `PREQSTATION_TOKEN`: optional bearer token override for MCP-backed `setup auto`; otherwise `~/.preqstation/oauth.json` is reused or created through browser OAuth
+- `PREQSTATION_SERVER_URL` or `PREQSTATION_API_URL`: optional PREQSTATION server URL for `install`, `update`, and remote `setup auto`
+- `PREQSTATION_TOKEN`: optional bearer token override for remote `setup auto`; otherwise `~/.preqstation/oauth.json` is reused or created through browser OAuth
 
 CLI auth config:
 

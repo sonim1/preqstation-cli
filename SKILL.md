@@ -41,7 +41,7 @@ Recommended OpenClaw setup:
 
 - Use `/preqstation setup auto` with `PROJECT_KEY REPO_URL` lines when OpenClaw should manage project-path mappings itself.
 - `auto` scans `PREQSTATION_REPO_ROOTS` when set, otherwise `~/projects`, and matches local git `origin` URLs against the provided repo URLs.
-- Use `/preqstation setup import` only as a compatibility shortcut when another runtime already populated `~/.preqstation-dispatch/projects.json`.
+- Use `/preqstation setup import` only as a compatibility shortcut when another runtime already populated `~/.preqstation/projects.json`; legacy `~/.preqstation-dispatch/projects.json` is an import fallback only.
 
 ## Standalone Dispatcher CLI
 
@@ -55,7 +55,7 @@ preqstation run --project-key PROJ --task-key PROJ-327 --objective implement --e
 
 Model overrides are optional. Omit `model`/`--model`, or pass `default`, to preserve the runtime's configured default with no `--model` flag. Non-default model values are passed through to the selected engine as `--model <model>` and should use the exact CLI model id for that engine.
 
-`preqstation setup auto` fetches PREQ projects from the configured `/mcp` endpoint with OAuth, scans local git repos under `PREQSTATION_REPO_ROOTS` or `~/projects`, and saves matched local paths to `~/.preqstation-dispatch/projects.json`.
+`preqstation setup auto` fetches PREQ projects from the configured PREQSTATION endpoint with OAuth, scans local git repos under `PREQSTATION_REPO_ROOTS` or `~/projects`, and saves matched local paths to `~/.preqstation/projects.json`.
 
 Interactive `preqstation install` runs that setup automatically and persists the CLI server URL config.
 
@@ -80,8 +80,9 @@ The current dispatcher resolves `project_cwd` in this order:
 
 1. explicit absolute path mentioned in a direct dispatch message
 2. OpenClaw plugin config mapping saved by `/preqstation setup`
-3. shared `~/.preqstation-dispatch/projects.json`
-4. optional legacy markdown mapping from `PREQSTATION_MEMORY_PATH` or configured `memoryPath`
+3. shared `~/.preqstation/projects.json`
+4. legacy `~/.preqstation-dispatch/projects.json` fallback when the new shared file is absent
+5. optional legacy markdown mapping from `PREQSTATION_MEMORY_PATH` or configured `memoryPath`
 
 Public payloads and Telegram dispatch messages should not include absolute local paths.
 
