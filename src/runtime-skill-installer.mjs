@@ -11,6 +11,7 @@ const PREQSTATION_SKILL_REPO = "sonim1/preqstation-skill";
 const PREQSTATION_SKILL_GITHUB_URL = "https://github.com/sonim1/preqstation-skill";
 const PREQSTATION_SKILL_PACKAGE_JSON_URL =
   "https://raw.githubusercontent.com/sonim1/preqstation-skill/main/package.json";
+export const MINIMUM_CLI_FIRST_SKILL_VERSION = "0.1.46";
 
 const RUNTIME_SKILL_TARGETS = {
   "claude-code": {
@@ -239,6 +240,26 @@ function parseClaudePluginVersion(stdout) {
     /❯\s+preqstation@preqstation\s*\n(?:.*\n)*?\s+Version:\s+([^\n]+)/u,
   );
   return match?.[1]?.trim() ?? null;
+}
+
+function compareVersion(left, right) {
+  const leftParts = String(left || "").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = String(right || "").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (delta !== 0) {
+      return delta;
+    }
+  }
+  return 0;
+}
+
+function isLegacyCliFirstSkillVersion(version) {
+  return Boolean(
+    version &&
+      compareVersion(version, MINIMUM_CLI_FIRST_SKILL_VERSION) < 0,
+  );
 }
 
 function isClaudePluginInstalled(stdout) {
@@ -550,23 +571,29 @@ export async function inspectRuntimeWorkerSupport({
         const pluginList = await exec("claude", ["plugin", "list"], { env });
         const pluginInstalled = isClaudePluginInstalled(pluginList?.stdout ?? "");
         const installedVersion = parseClaudePluginVersion(pluginList?.stdout ?? "");
+        const legacySkill = pluginInstalled && isLegacyCliFirstSkillVersion(installedVersion);
         results.push({
           ok: true,
           target: runtime,
           action:
             !pluginInstalled
               ? "not_installed"
-              : latestVersion && installedVersion && installedVersion !== latestVersion
+              : legacySkill
+                ? "needs_attention"
+                : latestVersion && installedVersion && installedVersion !== latestVersion
                 ? "needs_attention"
                 : "already_current",
           installed_version: installedVersion,
           latest_version: latestVersion,
+          minimum_cli_first_skill_version: MINIMUM_CLI_FIRST_SKILL_VERSION,
+          legacy_skill: legacySkill,
         });
         continue;
       }
 
       const state = await inspectAgentSkillState({ runtime, env, exec, readFile });
       const installedVersion = state.installedVersion ?? null;
+      const legacySkill = state.agentInstalled && isLegacyCliFirstSkillVersion(installedVersion);
       results.push({
         ok: true,
         target: runtime,
@@ -575,12 +602,16 @@ export async function inspectRuntimeWorkerSupport({
             ? state.entries.length > 0
               ? "not_enabled"
               : "not_installed"
-            : latestVersion && installedVersion && installedVersion !== latestVersion
+            : legacySkill
+              ? "needs_attention"
+              : latestVersion && installedVersion && installedVersion !== latestVersion
               ? "needs_attention"
               : "already_current",
         installed_version: installedVersion,
         latest_version: latestVersion,
         configured_agents: state.configuredAgents,
+        minimum_cli_first_skill_version: MINIMUM_CLI_FIRST_SKILL_VERSION,
+        legacy_skill: legacySkill,
       });
     } catch (error) {
       results.push({

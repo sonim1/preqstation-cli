@@ -57,11 +57,11 @@ Model overrides are optional. Omit `model`/`--model`, or pass `default`, to pres
 
 `preqstation setup auto` fetches PREQ projects from the configured `/mcp` endpoint with OAuth, scans local git repos under `PREQSTATION_REPO_ROOTS` or `~/projects`, and saves matched local paths to `~/.preqstation-dispatch/projects.json`.
 
-Interactive `preqstation install` runs that MCP-backed setup automatically after registering runtime MCP endpoints.
+Interactive `preqstation install` runs that setup automatically and persists the CLI server URL config.
 
-`preqstation update` refreshes installed entrypoints/runtime support and then runs the same MCP-backed project setup.
+`preqstation update` refreshes installed entrypoints/runtime support and then runs the same project setup.
 
-Interactive `preqstation uninstall` removes selected request entrypoints, runtime MCP registrations, and runtime worker support while keeping project mappings and OAuth cache data.
+Interactive `preqstation uninstall` removes selected request entrypoints, runtime registrations, and runtime worker support while keeping project mappings and OAuth cache data.
 
 Hermes Telegram messages should lead to `preqstation`; they should not implement the PREQ task inside the Hermes chat run.
 
@@ -89,11 +89,13 @@ Public payloads and Telegram dispatch messages should not include absolute local
 
 The dispatched CLI reads `./.preqstation-instructions.txt` in the worktree and should:
 
-1. call `preq_get_task("<task>")` first when a task key exists
-2. call `preq_start_task("<task>", "<engine>")` before substantive work
-3. if the objective is `ask`, update the task note, use `preq_update_task_note`, and clear `run_state` with `preq_update_task_status` while keeping workflow status unchanged
+1. run `preqstation task get <task>` first when a task key exists, using the absolute CLI path written into the instructions
+2. run `preqstation task start <task> --engine <engine>` before substantive work
+3. if the objective is `ask`, update the task note with `preqstation task note <task> --body-file note.md`, then clear `run_state` with `preqstation task status <task> --status <current-status> --clear-run-state` while keeping workflow status unchanged
 4. work only inside the resolved worktree
 5. if launched from OpenClaw and `openclaw` is available, notify OpenClaw on completion with `openclaw system event --text "Done: <brief summary>" --mode now`
+
+Workers should not call native PREQ MCP tools even if they are visible. The dispatcher-generated instructions are the task-specific source of truth.
 
 ## Runtime Artifacts
 

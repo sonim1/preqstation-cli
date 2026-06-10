@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  inspectRuntimeWorkerSupport,
   inspectRuntimeExecutableHealth,
   installRuntimeWorkerSupport,
   uninstallRuntimeWorkerSupport,
@@ -204,6 +205,52 @@ test("installRuntimeWorkerSupport reports Codex already_current when the install
       installed_version: "0.1.35",
       latest_version: "0.1.35",
       skill_path: skillDir,
+    },
+  ]);
+});
+
+test("inspectRuntimeWorkerSupport flags legacy pre-CLI-first skill installs", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-skill-codex-legacy-"));
+  const skillDir = path.join(tempDir, ".codex", "skills", "preqstation");
+  await fs.mkdir(skillDir, { recursive: true });
+  await fs.writeFile(
+    path.join(skillDir, "package.json"),
+    JSON.stringify({ name: "preqstation-skill", version: "0.1.45" }),
+    "utf8",
+  );
+
+  const results = await inspectRuntimeWorkerSupport({
+    runtimes: ["codex"],
+    env: { PATH: process.env.PATH, HOME: tempDir },
+    fetchFn: createFetchVersion("0.1.45"),
+    exec: async (command, args) => {
+      if (command === "npx" && args.join(" ") === "skills ls -g --json") {
+        return {
+          stdout: JSON.stringify([
+            {
+              name: "preqstation",
+              path: skillDir,
+              scope: "global",
+              agents: ["Codex"],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      throw new Error(`Unexpected command: ${command} ${args.join(" ")}`);
+    },
+  });
+
+  assert.deepEqual(results, [
+    {
+      ok: true,
+      target: "codex",
+      action: "needs_attention",
+      installed_version: "0.1.45",
+      latest_version: "0.1.45",
+      configured_agents: ["Codex"],
+      minimum_cli_first_skill_version: "0.1.46",
+      legacy_skill: true,
     },
   ]);
 });
