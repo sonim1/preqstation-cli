@@ -491,6 +491,14 @@ test("runInstallWizard reports when an MCP runtime is already configured", async
       preqstationServerUrl: "https://preq.example.com",
       mcpUrl: "https://preq.example.com/mcp",
     }),
+    inspectRuntimeExecutableHealthFn: async () => [
+      {
+        ok: true,
+        target: "claude-code",
+        category: "runtime_executable",
+        action: "ready",
+      },
+    ],
     installRuntimeMcpServersFn: async () => [
       {
         ok: true,
