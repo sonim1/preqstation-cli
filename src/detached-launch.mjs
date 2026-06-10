@@ -138,7 +138,7 @@ function buildEngineCommand(engine, platform = process.platform, model = null, o
   const modelFlag = buildModelFlag(model);
   switch (engine) {
     case "claude-code":
-      return `${envPrefix} claude${modelFlag} --dangerously-skip-permissions --strict-mcp-config --mcp-config ${shellQuote(options.mcpConfigFile)} ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} claude --print${modelFlag} --dangerously-skip-permissions --strict-mcp-config --mcp-config ${shellQuote(options.mcpConfigFile)} -- ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "gemini-cli":
       return `${envPrefix} GEMINI_SANDBOX=false gemini${modelFlag} --skip-trust --yolo --extensions '' -p ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "codex":
@@ -158,7 +158,7 @@ export function buildDetachedLaunchPlan({ cwd, engine, model = null, platform = 
   const script = [
     `mkdir -p ${shellQuote(".preqstation-dispatch")}`,
     ...(engine === "claude-code"
-      ? [`printf '%s\\n' '{}' > ${shellQuote(claudeMcpConfigFile)}`]
+      ? [`printf '%s\\n' '{"mcpServers":{}}' > ${shellQuote(claudeMcpConfigFile)}`]
       : []),
     `( nohup ${engineCommand} > ${shellQuote(path.relative(cwd, logFile))} 2>&1 < /dev/null & echo $! > ${shellQuote(path.relative(cwd, pidFile))} )`,
   ].join(" && ");

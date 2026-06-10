@@ -45,6 +45,17 @@ test("builds a detached Gemini launch plan with non-interactive automation flags
   assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8/);
 });
 
+test("builds a detached Claude launch plan with an empty MCP server record and prompt separator", () => {
+  const plan = buildDetachedLaunchPlan({
+    cwd: "/tmp/worktree/proj/task-proj-330-claude",
+    engine: "claude-code",
+    platform: "darwin",
+  });
+
+  assert.match(plan.script, /printf '%s\\n' '\{"mcpServers":\{\}\}' > '.preqstation-dispatch\/claude-mcp-config\.json'/);
+  assert.match(plan.script, /claude --print --dangerously-skip-permissions --strict-mcp-config --mcp-config '.preqstation-dispatch\/claude-mcp-config\.json' -- 'Read and execute instructions/);
+});
+
 test("adds model flags only when a detached model override is provided", () => {
   const codex = buildDetachedLaunchPlan({
     cwd: "/tmp/worktree/proj/task-proj-331-model",
@@ -60,7 +71,7 @@ test("adds model flags only when a detached model override is provided", () => {
     model: "claude-sonnet-4-6",
     platform: "darwin",
   });
-  assert.match(claude.script, /claude --model 'claude-sonnet-4-6' --dangerously-skip-permissions --strict-mcp-config --mcp-config/);
+  assert.match(claude.script, /claude --print --model 'claude-sonnet-4-6' --dangerously-skip-permissions --strict-mcp-config --mcp-config/);
 
   const gemini = buildDetachedLaunchPlan({
     cwd: "/tmp/worktree/proj/task-proj-331-model",
