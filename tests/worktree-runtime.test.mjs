@@ -130,13 +130,40 @@ test("creates a new worktree branch from the fetched origin main state", async (
   assert.equal(await fs.readFile(path.join(prepared.cwd, "fresh.txt"), "utf8"), "fresh\n");
 });
 
-test("rejects an existing local dispatch branch that is stale relative to origin main", async () => {
+test("refreshes an existing local dispatch branch with no unique commits when stale relative to origin main", async () => {
   const { seedDir, cloneDir } = await createRemoteBackedRepo();
   const worktreeRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
   );
 
-  git(["checkout", "-b", "task/proj-stale-existing"], cloneDir);
+  git(["branch", "task/proj-stale-existing"], cloneDir);
+
+  await fs.writeFile(path.join(seedDir, "fresh.txt"), "fresh\n");
+  git(["add", "fresh.txt"], seedDir);
+  git(["commit", "-m", "fresh"], seedDir);
+  git(["push", "origin", "main"], seedDir);
+
+  const prepared = await prepareWorktree({
+    projectCwd: cloneDir,
+    projectKey: "PROJ",
+    branchName: "task/proj-stale-existing",
+    worktreeRoot,
+  });
+
+  assert.equal(await fs.readFile(path.join(prepared.cwd, "fresh.txt"), "utf8"), "fresh\n");
+});
+
+test("rejects an existing local dispatch branch with unique commits when stale relative to origin main", async () => {
+  const { seedDir, cloneDir } = await createRemoteBackedRepo();
+  const worktreeRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
+  );
+
+  git(["checkout", "-b", "task/proj-stale-with-work"], cloneDir);
+  await fs.writeFile(path.join(cloneDir, "work.txt"), "work\n");
+  git(["add", "work.txt"], cloneDir);
+  git(["commit", "-m", "work"], cloneDir);
+  git(["checkout", "main"], cloneDir);
 
   await fs.writeFile(path.join(seedDir, "fresh.txt"), "fresh\n");
   git(["add", "fresh.txt"], seedDir);
@@ -147,7 +174,31 @@ test("rejects an existing local dispatch branch that is stale relative to origin
     prepareWorktree({
       projectCwd: cloneDir,
       projectKey: "PROJ",
-      branchName: "task/proj-stale-existing",
+      branchName: "task/proj-stale-with-work",
+      worktreeRoot,
+    }),
+    /stale relative to origin\/main/,
+  );
+});
+
+test("rejects an existing checked-out dispatch branch when stale relative to origin main", async () => {
+  const { seedDir, cloneDir } = await createRemoteBackedRepo();
+  const worktreeRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
+  );
+
+  git(["checkout", "-b", "task/proj-stale-checked-out"], cloneDir);
+
+  await fs.writeFile(path.join(seedDir, "fresh.txt"), "fresh\n");
+  git(["add", "fresh.txt"], seedDir);
+  git(["commit", "-m", "fresh"], seedDir);
+  git(["push", "origin", "main"], seedDir);
+
+  await assert.rejects(
+    prepareWorktree({
+      projectCwd: cloneDir,
+      projectKey: "PROJ",
+      branchName: "task/proj-stale-checked-out",
       worktreeRoot,
     }),
     /stale relative to origin\/main/,

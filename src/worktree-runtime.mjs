@@ -96,6 +96,48 @@ function refContainsBase(projectCwd, baseRef, ref) {
   }
 }
 
+function refAheadCount(projectCwd, baseRef, ref) {
+  if (!shouldCheckRemoteBase(baseRef)) {
+    return 0;
+  }
+
+  const count = git(["rev-list", "--count", `${baseRef}..${ref}`], projectCwd);
+  return Number.parseInt(count, 10) || 0;
+}
+
+function branchCheckoutPath(projectCwd, branchName) {
+  const output = git(["worktree", "list", "--porcelain"], projectCwd);
+  let currentWorktree = null;
+
+  for (const line of output.split(/\r?\n/u)) {
+    if (line.startsWith("worktree ")) {
+      currentWorktree = line.slice("worktree ".length);
+      continue;
+    }
+    if (line === `branch refs/heads/${branchName}`) {
+      return currentWorktree;
+    }
+  }
+
+  return null;
+}
+
+function refreshStaleBranchIfSafe(projectCwd, baseRef, branchName) {
+  if (refContainsBase(projectCwd, baseRef, branchName)) {
+    return;
+  }
+
+  if (refAheadCount(projectCwd, baseRef, branchName) !== 0) {
+    throw new Error(staleWorktreeMessage(branchName, baseRef));
+  }
+
+  if (branchCheckoutPath(projectCwd, branchName)) {
+    throw new Error(staleWorktreeMessage(branchName, baseRef));
+  }
+
+  git(["branch", "-f", branchName, baseRef], projectCwd);
+}
+
 function worktreeContainsBase(projectCwd, baseRef, cwd) {
   if (!shouldCheckRemoteBase(baseRef)) {
     return true;
@@ -227,9 +269,7 @@ export async function prepareWorktree({
     }
   } else {
     if (branchExists(projectCwd, resolvedBranchName)) {
-      if (!refContainsBase(projectCwd, baseRef, resolvedBranchName)) {
-        throw new Error(staleWorktreeMessage(resolvedBranchName, baseRef));
-      }
+      refreshStaleBranchIfSafe(projectCwd, baseRef, resolvedBranchName);
       git(["worktree", "add", "--detach", cwd, resolvedBranchName], projectCwd);
     } else {
       git(
