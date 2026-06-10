@@ -19,6 +19,10 @@ import {
   fetchPreqstationProjectsFromMcp as defaultFetchPreqstationProjectsFromMcp,
 } from "../preqstation-mcp-client.mjs";
 import {
+  isDispatchError,
+  serializeDispatchError,
+} from "../dispatch-error.mjs";
+import {
   getDefaultRepoRoots,
   getDefaultSharedMappingPath,
   resolveDefaultUserHome,
@@ -1963,6 +1967,17 @@ function writeDispatchResult({ stdout, parsed, result }) {
   );
 }
 
+function writeDispatchFailure({ stdout, stderr, error }) {
+  const serialized = serializeDispatchError(error);
+  stdout.write(
+    `${JSON.stringify({
+      ok: false,
+      error: serialized,
+    })}\n`,
+  );
+  stderr.write(`error [${serialized.code}]: ${serialized.message}\n`);
+}
+
 export async function runDispatcherCli({
   argv,
   stdin = process.stdin,
@@ -2129,6 +2144,10 @@ export async function runDispatcherCli({
     writeDispatchResult({ stdout, parsed, result });
     return 0;
   } catch (error) {
+    if (isDispatchError(error)) {
+      writeDispatchFailure({ stdout, stderr, error });
+      return 1;
+    }
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`error: ${message}\n`);
     return 1;

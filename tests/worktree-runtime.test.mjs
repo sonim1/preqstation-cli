@@ -130,7 +130,7 @@ test("creates a new worktree branch from the fetched origin main state", async (
   assert.equal(await fs.readFile(path.join(prepared.cwd, "fresh.txt"), "utf8"), "fresh\n");
 });
 
-test("refreshes an existing local dispatch branch with no unique commits when stale relative to origin main", async () => {
+test("rejects a safe stale local dispatch branch with structured recovery details", async () => {
   const { seedDir, cloneDir } = await createRemoteBackedRepo();
   const worktreeRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
@@ -143,14 +143,30 @@ test("refreshes an existing local dispatch branch with no unique commits when st
   git(["commit", "-m", "fresh"], seedDir);
   git(["push", "origin", "main"], seedDir);
 
-  const prepared = await prepareWorktree({
-    projectCwd: cloneDir,
-    projectKey: "PROJ",
-    branchName: "task/proj-stale-existing",
-    worktreeRoot,
-  });
-
-  assert.equal(await fs.readFile(path.join(prepared.cwd, "fresh.txt"), "utf8"), "fresh\n");
+  await assert.rejects(
+    prepareWorktree({
+      projectCwd: cloneDir,
+      projectKey: "PROJ",
+      branchName: "task/proj-stale-existing",
+      worktreeRoot,
+    }),
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "stale_dispatch_branch");
+      assert.equal(error.branch_name, "task/proj-stale-existing");
+      assert.equal(error.base_ref, "origin/main");
+      assert.equal(
+        error.worktree_path,
+        path.join(worktreeRoot, "PROJ", "task-proj-stale-existing"),
+      );
+      assert.equal(error.safe_to_delete, true);
+      assert.equal(error.suggested_action, "delete_branch_and_retry");
+      assert.deepEqual(error.commands, [
+        `git -C ${cloneDir} branch -D task/proj-stale-existing`,
+      ]);
+      return true;
+    },
+  );
 });
 
 test("rejects an existing local dispatch branch with unique commits when stale relative to origin main", async () => {
@@ -179,7 +195,14 @@ test("rejects an existing local dispatch branch with unique commits when stale r
       branchName: "task/proj-stale-with-work",
       worktreeRoot,
     }),
-    /stale relative to origin\/main/,
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "stale_dispatch_branch");
+      assert.equal(error.safe_to_delete, false);
+      assert.equal(error.suggested_action, "rebase_or_merge_branch_and_retry");
+      assert.deepEqual(error.commands, []);
+      return true;
+    },
   );
 });
 
@@ -203,7 +226,22 @@ test("rejects an existing checked-out dispatch branch when stale relative to ori
       branchName: "task/proj-stale-checked-out",
       worktreeRoot,
     }),
-    /stale relative to origin\/main/,
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "stale_dispatch_branch");
+      assert.equal(error.safe_to_delete, true);
+      assert.equal(
+        error.suggested_action,
+        "checkout_different_ref_delete_branch_and_retry",
+      );
+      assert.equal(error.commands.length, 2);
+      assert.match(error.commands[0], /git -C .* switch --detach origin\/main/u);
+      assert.equal(
+        error.commands[1],
+        `git -C ${cloneDir} branch -D task/proj-stale-checked-out`,
+      );
+      return true;
+    },
   );
 });
 
@@ -232,7 +270,21 @@ test("rejects a reusable worktree that is stale relative to origin main", async 
       branchName: "task/proj-stale-reuse",
       worktreeRoot,
     }),
-    /stale relative to origin\/main/,
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "stale_dispatch_branch");
+      assert.equal(error.safe_to_delete, true);
+      assert.equal(
+        error.suggested_action,
+        "remove_worktree_delete_branch_and_retry",
+      );
+      assert.deepEqual(error.commands, [
+        `git -C ${cloneDir} worktree remove ${first.cwd} --force`,
+        `git -C ${cloneDir} worktree prune`,
+        `git -C ${cloneDir} branch -D task/proj-stale-reuse`,
+      ]);
+      return true;
+    },
   );
 
   assert.equal(await fs.stat(first.cwd).then((stat) => stat.isDirectory()), true);
@@ -260,7 +312,13 @@ test("rejects a reusable worktree with tracked local changes", async () => {
       branchName: "task/proj-dirty-reuse",
       worktreeRoot,
     }),
-    /tracked local changes/,
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "dirty_dispatch_worktree");
+      assert.equal(error.worktree_path, first.cwd);
+      assert.deepEqual(error.commands, [`git -C ${first.cwd} status --short`]);
+      return true;
+    },
   );
 });
 
@@ -276,7 +334,38 @@ test("fails with a clear error when the mapped project path does not exist", asy
       branchName: "task/proj-328/edit-task-isyu",
       worktreeRoot,
     }),
-    /Project path does not exist: \/tmp\/preqstation-dispatcher\/does-not-exist/,
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "project_path_missing");
+      assert.equal(error.project_path, "/tmp/preqstation-dispatcher/does-not-exist");
+      assert.match(error.message, /Project path does not exist/);
+      return true;
+    },
+  );
+});
+
+test("fails with a typed error when the mapped project path is not a git checkout", async () => {
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-not-git-"),
+  );
+  const worktreeRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-worktrees-"),
+  );
+
+  await assert.rejects(
+    prepareWorktree({
+      projectCwd: tempDir,
+      projectKey: "PROJ",
+      branchName: "task/proj-328/edit-task-isyu",
+      worktreeRoot,
+    }),
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "project_not_git_checkout");
+      assert.equal(error.project_path, tempDir);
+      assert.match(error.message, /Project path is not a git checkout/);
+      return true;
+    },
   );
 });
 

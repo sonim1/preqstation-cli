@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { runDispatcherCli } from "../src/cli/preqstation-dispatcher.mjs";
+import { DispatchError } from "../src/dispatch-error.mjs";
 
 const packageJsonPath = new URL("../package.json", import.meta.url);
 
@@ -455,6 +456,64 @@ test("run-json dispatches a Hermes payload through the shared runtime", async ()
     log_file: "/tmp/worktree/log",
     pid_file: "/tmp/worktree/pid",
   });
+});
+
+test("run-json serializes typed dispatch failures to stdout JSON", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-cli-error-"));
+  const payloadPath = path.join(tempDir, "payload.json");
+  await fs.writeFile(
+    payloadPath,
+    JSON.stringify({
+      event_type: "preq.dispatch.requested",
+      dispatch: {
+        objective: "implement",
+        project_key: "PROJ",
+        task_key: "PROJ-123",
+        engine: "codex",
+      },
+    }),
+  );
+
+  const stdout = [];
+  const stderr = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["run-json", "--payload", payloadPath],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: (value) => stderr.push(value) },
+    dispatchPreqRun: async () => {
+      throw new DispatchError(
+        "stale_dispatch_branch",
+        "Dispatch branch task/proj-123 is stale relative to origin/main.",
+        {
+          branch_name: "task/proj-123",
+          base_ref: "origin/main",
+          worktree_path: path.join(tempDir, "worktrees", "PROJ", "task-proj-123"),
+          safe_to_delete: true,
+          suggested_action: "delete_branch_and_retry",
+          commands: [`git -C ${tempDir} branch -D task/proj-123`],
+        },
+      );
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: false,
+    error: {
+      code: "stale_dispatch_branch",
+      message: "Dispatch branch task/proj-123 is stale relative to origin/main.",
+      branch_name: "task/proj-123",
+      base_ref: "origin/main",
+      worktree_path: path.join(tempDir, "worktrees", "PROJ", "task-proj-123"),
+      safe_to_delete: true,
+      suggested_action: "delete_branch_and_retry",
+      commands: [`git -C ${tempDir} branch -D task/proj-123`],
+    },
+  });
+  assert.match(
+    stderr.join(""),
+    /error \[stale_dispatch_branch\]: Dispatch branch task\/proj-123 is stale/,
+  );
 });
 
 test("setup set writes a public shared mapping file without platform-specific config", async () => {

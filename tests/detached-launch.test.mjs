@@ -5,8 +5,10 @@ import {
   assertDetachedWorkerMcpReady,
   buildDetachedLaunchPlan,
   buildDetachedProcessEnv,
+  launchDetached,
   resolveWorkerHome,
 } from "../src/detached-launch.mjs";
+import { DispatchError } from "../src/dispatch-error.mjs";
 import { createBeforeDispatchHandler } from "../index.mjs";
 
 test("builds a detached codex launch plan that reads the instructions file", () => {
@@ -207,6 +209,39 @@ test("gemini detached preflight uses debug output so non-interactive MCP list is
   ]);
 });
 
+test("launchDetached wraps worker subprocess failures as typed dispatch errors", async () => {
+  const calls = [];
+  const cwd = "/tmp/worktree/proj/task-proj-327";
+
+  await assert.rejects(
+    launchDetached({
+      cwd,
+      engine: "codex",
+      env: { HOME: "/Users/kendrick" },
+      exec: (command, args) => {
+        calls.push({ command, args });
+        if (calls.length === 1) {
+          return `
+Name         Url                        Bearer Token Env Var  Status   Auth
+preqstation  https://pm.sonim1.com/mcp  -                     enabled  OAuth
+`;
+        }
+        throw new Error("codex binary missing");
+      },
+    }),
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "worker_launch_failed");
+      assert.equal(error.engine, "codex");
+      assert.equal(error.worktree_path, cwd);
+      assert.equal(error.cause_message, "codex binary missing");
+      assert.match(error.log_file, /codex\.log$/);
+      assert.match(error.pid_file, /codex\.pid$/);
+      return true;
+    },
+  );
+});
+
 test("before_dispatch handles matched preq messages and parks task flow in waiting", async () => {
   const calls = [];
   const taskFlow = {
@@ -336,4 +371,49 @@ test("before_dispatch returns an actionable Telegram reply when dispatch fails",
   assert.match(result.text, /Reason: GitHub access missing on the coding agent/);
   assert.match(result.text, /gh auth login/);
   assert.match(result.text, /resend the PREQ dispatch/);
+});
+
+test("before_dispatch formats typed stale branch failures with recovery commands", async () => {
+  const handler = createBeforeDispatchHandler(
+    {
+      runtime: {},
+      pluginConfig: {},
+      rootDir: "/tmp/preqstation-dispatcher",
+      logger: { info() {}, error() {} },
+    },
+    {
+      resolveProjectCwd: async () => "/tmp/project",
+      prepareWorktree: async () => {
+        throw new DispatchError(
+          "stale_dispatch_branch",
+          "Dispatch branch task/proj-327 is stale relative to origin/main.",
+          {
+            branch_name: "task/proj-327",
+            base_ref: "origin/main",
+            worktree_path: "/tmp/worktrees/PROJ/task-proj-327",
+            safe_to_delete: true,
+            suggested_action: "delete_branch_and_retry",
+            commands: ["git -C /tmp/project branch -D task/proj-327"],
+          },
+        );
+      },
+    },
+  );
+
+  const result = await handler(
+    {
+      content: "/preqstation dispatch implement PROJ-327 using codex",
+      channel: "telegram",
+    },
+    {
+      sessionKey: "agent:main",
+      accountId: "telegram:default",
+      conversationId: "chat-1",
+    },
+  );
+
+  assert.equal(result.handled, true);
+  assert.match(result.text, /Reason \[stale_dispatch_branch\]: Dispatch branch task\/proj-327/);
+  assert.match(result.text, /safe to delete/);
+  assert.match(result.text, /git -C \/tmp\/project branch -D task\/proj-327/);
 });

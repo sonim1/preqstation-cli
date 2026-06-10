@@ -138,3 +138,82 @@ test("dispatchPreqRun resolves a project, prepares a worktree, writes instructio
     logFile: "/tmp/worktrees/PROJ/task-proj-123-example/.preqstation-dispatch/codex.log",
   });
 });
+
+test("dispatchPreqRun wraps missing project mappings as typed dispatch errors", async () => {
+  const parsed = {
+    rawMessage: "/preqstation dispatch implement PROJ-123 using codex",
+    engine: "codex",
+    taskKey: "PROJ-123",
+    projectKey: "PROJ",
+    objective: "implement",
+    branchName: null,
+  };
+
+  await assert.rejects(
+    dispatchPreqRun({
+      rawMessage: parsed.rawMessage,
+      parsed,
+      configuredProjects: null,
+      sharedMappingPath: "/tmp/shared-projects.json",
+      memoryPath: null,
+      worktreeRoot: "/tmp/worktrees",
+      dependencies: {
+        resolveProjectCwd: async () => {
+          throw new Error("No project path mapping found for PROJ");
+        },
+      },
+    }),
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "project_mapping_missing");
+      assert.equal(error.project_key, "PROJ");
+      assert.deepEqual(error.commands, [
+        "preqstation setup auto",
+        "preqstation setup set PROJ /absolute/path/to/project",
+      ]);
+      return true;
+    },
+  );
+});
+
+test("dispatchPreqRun wraps worker launch failures as typed dispatch errors", async () => {
+  const parsed = {
+    rawMessage: "/preqstation dispatch implement PROJ-123 using codex",
+    engine: "codex",
+    taskKey: "PROJ-123",
+    projectKey: "PROJ",
+    objective: "implement",
+    branchName: null,
+  };
+
+  await assert.rejects(
+    dispatchPreqRun({
+      rawMessage: parsed.rawMessage,
+      parsed,
+      configuredProjects: { PROJ: "/tmp/project" },
+      sharedMappingPath: "/tmp/shared-projects.json",
+      memoryPath: null,
+      worktreeRoot: "/tmp/worktrees",
+      dependencies: {
+        resolveProjectCwd: async () => "/tmp/project",
+        prepareWorktree: async () => ({
+          cwd: "/tmp/worktrees/PROJ/task-proj-123",
+          branchName: "task/proj-123",
+        }),
+        renderPrompt: () => "instruction text",
+        writeInstructionsFile: async () => {},
+        launchDetached: async () => {
+          throw new Error("codex binary missing");
+        },
+      },
+    }),
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "worker_launch_failed");
+      assert.equal(error.engine, "codex");
+      assert.equal(error.worktree_path, "/tmp/worktrees/PROJ/task-proj-123");
+      assert.equal(error.cause_message, "codex binary missing");
+      return true;
+    },
+  );
+});

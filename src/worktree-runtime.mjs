@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+import { DispatchError } from "./dispatch-error.mjs";
+
 const ENV_FILE_PATTERNS = [/^\.env$/u, /^\.env\.local$/u, /^\.env\..+\.local$/u];
 const TEMPLATE_ENV_FILES = new Set([
   ".env.example",
@@ -105,6 +107,18 @@ function refAheadCount(projectCwd, baseRef, ref) {
   return Number.parseInt(count, 10) || 0;
 }
 
+function shellArg(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/u.test(text)) {
+    return text;
+  }
+  return `'${text.replaceAll("'", `'\"'\"'`)}'`;
+}
+
+function gitCommand(args) {
+  return args.map((arg) => shellArg(arg)).join(" ");
+}
+
 function branchCheckoutPath(projectCwd, branchName) {
   const output = git(["worktree", "list", "--porcelain"], projectCwd);
   let currentWorktree = null;
@@ -122,20 +136,8 @@ function branchCheckoutPath(projectCwd, branchName) {
   return null;
 }
 
-function refreshStaleBranchIfSafe(projectCwd, baseRef, branchName) {
-  if (refContainsBase(projectCwd, baseRef, branchName)) {
-    return;
-  }
-
-  if (refAheadCount(projectCwd, baseRef, branchName) !== 0) {
-    throw new Error(staleWorktreeMessage(branchName, baseRef));
-  }
-
-  if (branchCheckoutPath(projectCwd, branchName)) {
-    throw new Error(staleWorktreeMessage(branchName, baseRef));
-  }
-
-  git(["branch", "-f", branchName, baseRef], projectCwd);
+function worktreeHead(projectCwd, cwd) {
+  return git(["-C", cwd, "rev-parse", "HEAD"], projectCwd);
 }
 
 function worktreeContainsBase(projectCwd, baseRef, cwd) {
@@ -143,8 +145,7 @@ function worktreeContainsBase(projectCwd, baseRef, cwd) {
     return true;
   }
 
-  const head = git(["-C", cwd, "rev-parse", "HEAD"], projectCwd);
-  return refContainsBase(projectCwd, baseRef, head);
+  return refContainsBase(projectCwd, baseRef, worktreeHead(projectCwd, cwd));
 }
 
 function worktreeTrackedStatus(cwd) {
@@ -158,11 +159,91 @@ function staleWorktreeMessage(branchName, baseRef) {
   ].join(" ");
 }
 
+function createStaleDispatchBranchError({
+  projectCwd,
+  branchName,
+  baseRef,
+  worktreePath,
+  commands = [],
+  suggestedAction,
+  ref = branchName,
+}) {
+  const safeToDelete = refAheadCount(projectCwd, baseRef, ref) === 0;
+  return new DispatchError(
+    "stale_dispatch_branch",
+    staleWorktreeMessage(branchName, baseRef),
+    {
+      branch_name: branchName,
+      base_ref: baseRef,
+      worktree_path: worktreePath,
+      safe_to_delete: safeToDelete,
+      suggested_action: safeToDelete
+        ? suggestedAction
+        : "rebase_or_merge_branch_and_retry",
+      commands: safeToDelete ? commands : [],
+    },
+  );
+}
+
+function createStaleLocalBranchError(projectCwd, baseRef, branchName, cwd) {
+  const checkoutPath = branchCheckoutPath(projectCwd, branchName);
+  if (checkoutPath) {
+    return createStaleDispatchBranchError({
+      projectCwd,
+      branchName,
+      baseRef,
+      worktreePath: checkoutPath,
+      suggestedAction: "checkout_different_ref_delete_branch_and_retry",
+      commands: [
+        gitCommand(["git", "-C", checkoutPath, "switch", "--detach", baseRef]),
+        gitCommand(["git", "-C", projectCwd, "branch", "-D", branchName]),
+      ],
+    });
+  }
+
+  return createStaleDispatchBranchError({
+    projectCwd,
+    branchName,
+    baseRef,
+    worktreePath: cwd,
+    suggestedAction: "delete_branch_and_retry",
+    commands: [gitCommand(["git", "-C", projectCwd, "branch", "-D", branchName])],
+  });
+}
+
+function createStaleReusableWorktreeError(projectCwd, baseRef, branchName, cwd) {
+  return createStaleDispatchBranchError({
+    projectCwd,
+    branchName,
+    baseRef,
+    worktreePath: cwd,
+    ref: branchExists(projectCwd, branchName) ? branchName : worktreeHead(projectCwd, cwd),
+    suggestedAction: "remove_worktree_delete_branch_and_retry",
+    commands: [
+      gitCommand(["git", "-C", projectCwd, "worktree", "remove", cwd, "--force"]),
+      gitCommand(["git", "-C", projectCwd, "worktree", "prune"]),
+      gitCommand(["git", "-C", projectCwd, "branch", "-D", branchName]),
+    ],
+  });
+}
+
 function dirtyWorktreeMessage(cwd) {
   return [
     `Dispatch worktree ${cwd} has tracked local changes.`,
     "Remove or clean the existing dispatch worktree, or dispatch with a new branch name before retrying.",
   ].join(" ");
+}
+
+function createDirtyDispatchWorktreeError(cwd) {
+  return new DispatchError(
+    "dirty_dispatch_worktree",
+    dirtyWorktreeMessage(cwd),
+    {
+      worktree_path: cwd,
+      suggested_action: "inspect_or_clean_worktree_and_retry",
+      commands: [gitCommand(["git", "-C", cwd, "status", "--short"])],
+    },
+  );
 }
 
 function isReusableWorktree(cwd) {
@@ -175,13 +256,27 @@ function isReusableWorktree(cwd) {
 export async function ensureProjectCheckout(projectCwd) {
   const stat = await fs.stat(projectCwd).catch(() => null);
   if (!stat?.isDirectory()) {
-    throw new Error(`Project path does not exist: ${projectCwd}`);
+    throw new DispatchError(
+      "project_path_missing",
+      `Project path does not exist: ${projectCwd}`,
+      {
+        project_path: projectCwd,
+        suggested_action: "update_project_mapping_and_retry",
+      },
+    );
   }
 
   const gitDir = path.join(projectCwd, ".git");
   const gitStat = await fs.lstat(gitDir).catch(() => null);
   if (!gitStat) {
-    throw new Error(`Project path is not a git checkout: ${projectCwd}`);
+    throw new DispatchError(
+      "project_not_git_checkout",
+      `Project path is not a git checkout: ${projectCwd}`,
+      {
+        project_path: projectCwd,
+        suggested_action: "map_project_to_git_checkout_and_retry",
+      },
+    );
   }
 }
 
@@ -262,14 +357,16 @@ export async function prepareWorktree({
 
   if (await isReusableWorktree(cwd)) {
     if (!worktreeContainsBase(projectCwd, baseRef, cwd)) {
-      throw new Error(staleWorktreeMessage(resolvedBranchName, baseRef));
+      throw createStaleReusableWorktreeError(projectCwd, baseRef, resolvedBranchName, cwd);
     }
     if (worktreeTrackedStatus(cwd)) {
-      throw new Error(dirtyWorktreeMessage(cwd));
+      throw createDirtyDispatchWorktreeError(cwd);
     }
   } else {
     if (branchExists(projectCwd, resolvedBranchName)) {
-      refreshStaleBranchIfSafe(projectCwd, baseRef, resolvedBranchName);
+      if (!refContainsBase(projectCwd, baseRef, resolvedBranchName)) {
+        throw createStaleLocalBranchError(projectCwd, baseRef, resolvedBranchName, cwd);
+      }
       git(["worktree", "add", "--detach", cwd, resolvedBranchName], projectCwd);
     } else {
       git(

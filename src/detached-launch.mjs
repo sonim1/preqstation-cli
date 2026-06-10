@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 
 import { resolveDefaultUserHome } from "./project-mapping.mjs";
 import { PREQSTATION_INSTRUCTIONS_FILE } from "./instruction-files.mjs";
+import { DispatchError, isDispatchError } from "./dispatch-error.mjs";
 
 const BOOTSTRAP_PROMPT =
   `Read and execute instructions from ./${PREQSTATION_INSTRUCTIONS_FILE} in the current workspace. Treat that file as the source of truth. If that file is missing, stop. Execute the full User Objective to completion before exiting. Do not stop after preq_get_task or preq_start_task; those are bootstrap only. You must call the objective-specific final PREQ tool described in the instructions before exiting.`;
@@ -208,22 +209,41 @@ export function buildDetachedLaunchPlan({ cwd, engine, model = null, platform = 
 export async function launchDetached({ cwd, engine, model = null, env = process.env, exec = execFileSync }) {
   const plan = buildDetachedLaunchPlan({ cwd, engine, model });
   const detachedEnv = buildDetachedProcessEnv(env, process.platform, engine);
-  assertDetachedWorkerMcpReady({
-    engine,
-    env: detachedEnv,
-    exec,
-  });
-  exec(plan.command, plan.args, {
-    cwd,
-    env: detachedEnv,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  try {
+    assertDetachedWorkerMcpReady({
+      engine,
+      env: detachedEnv,
+      exec,
+    });
+    exec(plan.command, plan.args, {
+      cwd,
+      env: detachedEnv,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
-  const pid = Number((await fs.readFile(plan.pidFile, "utf8")).trim());
-  return {
-    pid,
-    pidFile: plan.pidFile,
-    logFile: plan.logFile,
-  };
+    const pid = Number((await fs.readFile(plan.pidFile, "utf8")).trim());
+    return {
+      pid,
+      pidFile: plan.pidFile,
+      logFile: plan.logFile,
+    };
+  } catch (error) {
+    if (isDispatchError(error)) {
+      throw error;
+    }
+    const message = String(error?.stderr || error?.message || error).trim();
+    throw new DispatchError(
+      "worker_launch_failed",
+      `Failed to launch detached ${WORKER_LABEL_BY_ENGINE[engine] || engine} worker: ${message}`,
+      {
+        engine,
+        worktree_path: cwd,
+        log_file: plan.logFile,
+        pid_file: plan.pidFile,
+        cause_message: message,
+        suggested_action: "check_worker_runtime_and_retry",
+      },
+    );
+  }
 }

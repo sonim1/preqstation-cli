@@ -5,6 +5,7 @@ import {
   defaultDispatchDependencies,
   dispatchPreqRun,
 } from "../../core/dispatch-runtime.mjs";
+import { isDispatchError, serializeDispatchError } from "../../dispatch-error.mjs";
 import { parseDispatchMessage } from "../../parse-dispatch-message.mjs";
 import { getDefaultSharedMappingPath } from "../../project-mapping.mjs";
 import { createSetupCommandHandler } from "../../setup-command.mjs";
@@ -33,7 +34,70 @@ function resolveWorktreeRoot(api) {
     : path.join(os.homedir(), ".openclaw-preq-worktrees");
 }
 
-function formatDispatchFailureText(parsed, message) {
+function formatTypedDispatchFailureText(parsed, error) {
+  const serialized = serializeDispatchError(error);
+  const target = parsed.taskKey ?? parsed.projectKey;
+  const lines = [
+    `failed to dispatch ${target} via ${parsed.engine}`,
+    `Reason [${serialized.code}]: ${serialized.message}`,
+  ];
+
+  if (serialized.code === "stale_dispatch_branch") {
+    lines.push(
+      serialized.safe_to_delete
+        ? "Next: remove the stale dispatch branch/worktree, then resend the PREQ dispatch."
+        : "Next: rebase or merge the dispatch branch onto the base ref, then resend the PREQ dispatch.",
+    );
+    if (serialized.safe_to_delete) {
+      lines.push("This stale dispatch state is marked safe to delete.");
+    }
+    if (serialized.commands?.length) {
+      lines.push("Commands:", ...serialized.commands.map((command) => `  ${command}`));
+    }
+    return lines.join("\n");
+  }
+
+  if (serialized.code === "dirty_dispatch_worktree") {
+    lines.push(
+      "Next: inspect or clean the existing dispatch worktree, then resend the PREQ dispatch.",
+    );
+    if (serialized.commands?.length) {
+      lines.push("Commands:", ...serialized.commands.map((command) => `  ${command}`));
+    }
+    return lines.join("\n");
+  }
+
+  if (
+    serialized.code === "project_mapping_missing" ||
+    serialized.code === "project_path_missing" ||
+    serialized.code === "project_not_git_checkout"
+  ) {
+    lines.push(
+      "Next: fix the dispatcher project mapping on this host with /preqstation setup status or /preqstation setup auto, then resend the PREQ dispatch.",
+    );
+    if (serialized.commands?.length) {
+      lines.push("Commands:", ...serialized.commands.map((command) => `  ${command}`));
+    }
+    return lines.join("\n");
+  }
+
+  if (serialized.code === "worker_launch_failed") {
+    lines.push(
+      "Next: check the worker runtime on this host, then resend the PREQ dispatch.",
+    );
+    return lines.join("\n");
+  }
+
+  lines.push("Next: fix the dispatcher error on this host, then resend the PREQ dispatch.");
+  return lines.join("\n");
+}
+
+function formatDispatchFailureText(parsed, error) {
+  if (isDispatchError(error)) {
+    return formatTypedDispatchFailureText(parsed, error);
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
   const target = parsed.taskKey ?? parsed.projectKey;
   const lines = [`failed to dispatch ${target} via ${parsed.engine}`, `Reason: ${message}`];
 
@@ -269,11 +333,12 @@ export function createBeforeDispatchHandler(api, overrides = {}) {
       const message = error instanceof Error ? error.message : String(error);
       api.logger?.error?.("Failed to dispatch PREQ task", {
         error: message,
+        error_code: isDispatchError(error) ? error.code : undefined,
         message: parsed.rawMessage,
       });
       return {
         handled: true,
-        text: formatDispatchFailureText(parsed, message),
+        text: formatDispatchFailureText(parsed, error),
       };
     }
   };

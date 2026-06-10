@@ -74,3 +74,5 @@ branch_name=task/proj-123-example
 ## Verification
 
 The command should print JSON with `ok: true`, `project_key`, `task_key`, `engine`, `cwd`, `branch_name`, `pid`, `log_file`, and `pid_file`.
+
+If the command exits non-zero but stdout contains JSON with `ok: false`, report `error.code`, `error.message`, and any `error.commands` recovery commands. Prefer `error.code` over matching human-readable stderr text.
