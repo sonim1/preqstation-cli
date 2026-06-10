@@ -19,11 +19,11 @@ test("renders preq dispatch prompt with task and workspace details", () => {
   assert.match(prompt, /Branch Name: task\/proj-327\/browser-notification-chuga/);
   assert.match(prompt, /User Objective: plan/);
   assert.match(prompt, /Objective Completion Contract/);
-  assert.match(prompt, /preq_get_task and preq_start_task are bootstrap only/i);
-  assert.match(prompt, /For User Objective plan, do not exit until preq_plan_task succeeds/i);
+  assert.match(prompt, /task get and task start are bootstrap only/i);
+  assert.match(prompt, /For User Objective plan, do not exit until the task plan CLI command succeeds/i);
   assert.match(prompt, /No additional actions were taken yet/i);
   assert.match(prompt, /Work only inside \/tmp\/worktree\/proj\/task-proj-327-browser-notification-chuga/);
-  assert.match(prompt, /preq_start_task\("PROJ-327", "codex"\)/);
+  assert.match(prompt, /task start PROJ-327 --engine codex/);
   assert.match(prompt, /notes and acceptance criteria as the implementation source of truth/i);
   assert.match(prompt, /Comments are conversational requests only/i);
   assert.match(prompt, /For comment objectives only/i);
@@ -36,6 +36,8 @@ test("renders preq dispatch prompt with task and workspace details", () => {
   assert.match(prompt, /If \.\/\.preqstation-instructions\.txt is missing, stop/i);
   assert.match(prompt, /Read and execute instructions from \.\/\.preqstation-instructions\.txt/i);
   assert.doesNotMatch(prompt, /\.preqstation-prompt\.txt/i);
+  assert.doesNotMatch(prompt, /MCP CLI Helper|mcp call|mcp_preqstation_|preq_[a-z_]+\(/);
+  assert.equal(prompt.match(/\bMCP\b/g)?.length, 1);
   assert.doesNotMatch(prompt, /openclaw system event/i);
 });
 
@@ -52,10 +54,10 @@ test("renders ask-specific note rewrite guidance", () => {
   });
 
   assert.match(prompt, /User Objective: ask/);
-  assert.match(prompt, /For User Objective ask, do not exit until preq_update_task_note succeeds/i);
+  assert.match(prompt, /For User Objective ask, do not exit until task note succeeds/i);
   assert.match(prompt, /Ask Hint: Summarize around acceptance criteria/);
-  assert.match(prompt, /preq_update_task_note/);
-  assert.match(prompt, /preq_update_task_status/);
+  assert.match(prompt, /task note PROJ-328 --body-file note.md/);
+  assert.match(prompt, /task status PROJ-328 --status <current-status> --clear-run-state/);
   assert.match(prompt, /keep the workflow status unchanged/);
   assert.match(prompt, /prototype-style asks may generate local artifacts/i);
   assert.match(prompt, /authenticated artifact provider/i);
@@ -63,9 +65,9 @@ test("renders ask-specific note rewrite guidance", () => {
   assert.match(prompt, /HTML prototype|HTML mockup/i);
   assert.match(prompt, /screenshot/i);
   assert.match(prompt, /structured artifacts array/i);
-  assert.match(prompt, /preq_update_task_note/);
-  assert.match(prompt, /preq_complete_task/);
-  assert.match(prompt, /preq_update_qa_run/);
+  assert.match(prompt, /task note/);
+  assert.match(prompt, /task complete/);
+  assert.match(prompt, /qa update/);
   assert.match(prompt, /free of Artifacts: markdown blocks/i);
   assert.match(prompt, /7-day expiring reviewer links/i);
   assert.match(prompt, /access=quickshare/i);
@@ -88,11 +90,11 @@ test("renders insight-specific task generation guidance", () => {
 
   assert.match(prompt, /Task ID: N\/A/);
   assert.match(prompt, /User Objective: insight/);
-  assert.match(prompt, /For User Objective insight, do not exit until the required preq_create_task calls are complete/i);
+  assert.match(prompt, /For User Objective insight, do not exit until the required task create CLI commands are complete/i);
   assert.match(prompt, /Insight Prompt: Break down the Connections page redesign/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
-  assert.match(prompt, /preq_list_tasks\(projectKey=\.\.\., detail=full\)/);
-  assert.match(prompt, /preq_create_task/);
+  assert.match(prompt, /task list --project PROJ --detail full/);
+  assert.match(prompt, /task create --project PROJ --json-file task\.json/);
 });
 
 test("renders qa run metadata for project-level qa dispatches", () => {
@@ -110,13 +112,13 @@ test("renders qa run metadata for project-level qa dispatches", () => {
   });
 
   assert.match(prompt, /User Objective: qa/);
-  assert.match(prompt, /For User Objective qa, do not exit until preq_update_qa_run records passed or failed/i);
+  assert.match(prompt, /For User Objective qa, do not exit until qa update records passed or failed/i);
   assert.match(prompt, /QA Run ID: run-123/);
   assert.match(prompt, /QA Task Keys: PROJ-1, PROJ-2/);
   assert.match(prompt, /Task ID may be absent for project-level objectives/);
   assert.match(prompt, /use QA Run ID and QA Task Keys from these instructions/i);
-  assert.match(prompt, /MCP CLI Helper: node \/tmp\/preqstation-cli\/bin\/preqstation\.mjs mcp call/);
-  assert.match(prompt, /prefer the MCP CLI helper over native MCP tool calls/i);
+  assert.match(prompt, /PREQ CLI: node \/tmp\/preqstation-cli\/bin\/preqstation\.mjs/);
+  assert.match(prompt, /Native PREQ MCP tools must not be used even if visible/i);
 });
 
 test("renders comment id metadata for comment dispatches", () => {
@@ -132,11 +134,11 @@ test("renders comment id metadata for comment dispatches", () => {
   });
 
   assert.match(prompt, /User Objective: comment/);
-  assert.match(prompt, /For User Objective comment, do not exit until preq_reply_task_comment succeeds/i);
+  assert.match(prompt, /For User Objective comment, do not exit until comment reply succeeds/i);
   assert.match(prompt, /Comment ID: comment-abc-123/);
 });
 
-test("renders Gemini CLI MCP tool naming guidance", () => {
+test("renders CLI-only guidance for Gemini CLI", () => {
   const prompt = renderPrompt({
     taskKey: "PROJ-330",
     projectKey: "PROJ",
@@ -147,9 +149,7 @@ test("renders Gemini CLI MCP tool naming guidance", () => {
     projectCwd: "/tmp/project",
   });
 
-  assert.match(prompt, /Gemini CLI tool naming/);
-  assert.match(prompt, /Do not call activate_skill/);
-  assert.match(prompt, /mcp_preqstation_preq_get_task/);
-  assert.match(prompt, /mcp_preqstation_preq_start_task/);
-  assert.match(prompt, /mcp_preqstation_preq_update_task_note/);
+  assert.match(prompt, /task get PROJ-330/);
+  assert.doesNotMatch(prompt, /Gemini CLI tool naming/);
+  assert.doesNotMatch(prompt, /mcp_preqstation_/);
 });

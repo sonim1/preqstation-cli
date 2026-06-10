@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  assertDetachedWorkerMcpReady,
+  assertDetachedWorkerCliAuthReady,
   buildDetachedLaunchPlan,
   buildDetachedProcessEnv,
   launchDetached,
@@ -25,8 +25,8 @@ test("builds a detached codex launch plan that reads the instructions file", () 
   assert.match(plan.script, /-c 'mcp_servers\.preqstation\.enabled=false'/);
   assert.match(plan.script, /Read and execute instructions from \.\/\.preqstation-instructions\.txt/);
   assert.doesNotMatch(plan.script, /\.preqstation-prompt\.txt/);
-  assert.match(plan.script, /Do not stop after preq_get_task or preq_start_task/);
-  assert.match(plan.script, /objective-specific final PREQ tool/);
+  assert.match(plan.script, /Do not stop after task get or task start/);
+  assert.match(plan.script, /objective-specific final PREQ CLI command/);
   assert.doesNotMatch(plan.script, /C\.UTF-8/);
   assert.doesNotMatch(plan.script, /LC_CTYPE=UTF-8/);
   assert.doesNotMatch(plan.script, /& &&/);
@@ -40,7 +40,8 @@ test("builds a detached Gemini launch plan with non-interactive automation flags
     platform: "darwin",
   });
 
-  assert.match(plan.script, /GEMINI_SANDBOX=false gemini --skip-trust --yolo --allowed-mcp-server-names preqstation --extensions '' -p/);
+  assert.match(plan.script, /GEMINI_SANDBOX=false gemini --skip-trust --yolo --extensions '' -p/);
+  assert.doesNotMatch(plan.script, /--allowed-mcp-server-names preqstation/);
   assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8/);
 });
 
@@ -59,7 +60,7 @@ test("adds model flags only when a detached model override is provided", () => {
     model: "claude-sonnet-4-6",
     platform: "darwin",
   });
-  assert.match(claude.script, /claude --model 'claude-sonnet-4-6' --dangerously-skip-permissions/);
+  assert.match(claude.script, /claude --model 'claude-sonnet-4-6' --dangerously-skip-permissions --strict-mcp-config --mcp-config/);
 
   const gemini = buildDetachedLaunchPlan({
     cwd: "/tmp/worktree/proj/task-proj-331-model",
@@ -138,75 +139,46 @@ test("keeps C.UTF-8 as the detached locale on non-macOS hosts", () => {
   assert.match(plan.script, /env -u LC_ALL -u LANG -u LC_CTYPE LANG=C.UTF-8 LC_CTYPE=C.UTF-8 codex --ask-for-approval never exec -c 'mcp_servers\.preqstation\.enabled=false' --sandbox danger-full-access/);
 });
 
-test("codex detached preflight rejects preqstation MCP sessions that are not logged in", () => {
-  assert.throws(
-    () =>
-      assertDetachedWorkerMcpReady({
-        engine: "codex",
-        env: { HOME: "/Users/kendrick/.hermes/profiles/preq-coder/home" },
-        exec: () => `
-Name         Url                        Bearer Token Env Var  Status   Auth
-preqstation  https://pm.sonim1.com/mcp  -                     enabled  Not logged in
-`,
-      }),
-    /PREQSTATION_CODEX_HOME or PREQSTATION_WORKER_HOME/,
-  );
-});
-
-test("codex detached preflight accepts authenticated preqstation MCP sessions", () => {
-  assert.doesNotThrow(() =>
-    assertDetachedWorkerMcpReady({
+test("detached CLI auth preflight rejects missing worker auth", async () => {
+  await assert.rejects(
+    assertDetachedWorkerCliAuthReady({
       engine: "codex",
-      env: { HOME: "/Users/kendrick" },
-      exec: () => `
-Name         Url                        Bearer Token Env Var  Status   Auth
-preqstation  https://pm.sonim1.com/mcp  -                     enabled  OAuth
-`,
+      env: { HOME: "/Users/kendrick/.preq-workers/codex" },
+      resolveServerUrl: async () => null,
+      inspectAuth: async () => ({
+        authenticated: false,
+        auth_source: null,
+        oauth_cache_exists: false,
+      }),
     }),
+    (error) => {
+      assert.equal(error.name, "DispatchError");
+      assert.equal(error.code, "worker_auth_unready");
+      assert.equal(error.worker_home, "/Users/kendrick/.preq-workers/codex");
+      assert.match(error.oauth_path, /oauth\.json$/);
+      assert.match(error.commands[0], /preqstation auth login/);
+      return true;
+    },
   );
 });
 
-test("claude detached preflight rejects preqstation MCP sessions that still need auth", () => {
-  assert.throws(
-    () =>
-      assertDetachedWorkerMcpReady({
-        engine: "claude-code",
-        env: { HOME: "/Users/kendrick/.preq-workers/claude" },
-        exec: () => "preqstation: https://pm.sonim1.com/mcp (HTTP) - ! Needs authentication\n",
-      }),
-    /PREQSTATION_CLAUDE_HOME or PREQSTATION_WORKER_HOME/,
-  );
-});
-
-test("gemini detached preflight rejects disconnected preqstation MCP sessions", () => {
-  assert.throws(
-    () =>
-      assertDetachedWorkerMcpReady({
-        engine: "gemini-cli",
-        env: { HOME: "/Users/kendrick/.preq-workers/gemini" },
-        exec: () => "✗ preqstation: https://pm.sonim1.com/mcp (http) - Disconnected\n",
-      }),
-    /PREQSTATION_GEMINI_HOME or PREQSTATION_WORKER_HOME/,
-  );
-});
-
-test("gemini detached preflight uses debug output so non-interactive MCP list is visible", () => {
-  const calls = [];
-
-  assert.doesNotThrow(() =>
-    assertDetachedWorkerMcpReady({
-      engine: "gemini-cli",
-      env: { HOME: "/Users/kendrick" },
-      exec: (command, args) => {
-        calls.push({ command, args });
-        return "✓ preqstation: https://pm.sonim1.com/mcp (http) - Connected\n";
+test("detached CLI auth preflight accepts worker env token and server URL", async () => {
+  await assert.doesNotReject(
+    assertDetachedWorkerCliAuthReady({
+      engine: "codex",
+      env: {
+        HOME: "/Users/kendrick/.preq-workers/codex",
+        PREQSTATION_SERVER_URL: "https://preq.example.com",
+        PREQSTATION_TOKEN: "token",
       },
+      resolveServerUrl: async () => "https://preq.example.com",
+      inspectAuth: async () => ({
+        authenticated: true,
+        auth_source: "env_token",
+        oauth_cache_exists: false,
+      }),
     }),
   );
-
-  assert.deepEqual(calls, [
-    { command: "sh", args: ["-lc", "gemini mcp list --debug 2>&1"] },
-  ]);
 });
 
 test("launchDetached wraps worker subprocess failures as typed dispatch errors", async () => {
@@ -217,15 +189,13 @@ test("launchDetached wraps worker subprocess failures as typed dispatch errors",
     launchDetached({
       cwd,
       engine: "codex",
-      env: { HOME: "/Users/kendrick" },
+      env: {
+        HOME: "/Users/kendrick",
+        PREQSTATION_SERVER_URL: "https://preq.example.com",
+        PREQSTATION_TOKEN: "token",
+      },
       exec: (command, args) => {
         calls.push({ command, args });
-        if (calls.length === 1) {
-          return `
-Name         Url                        Bearer Token Env Var  Status   Auth
-preqstation  https://pm.sonim1.com/mcp  -                     enabled  OAuth
-`;
-        }
         throw new Error("codex binary missing");
       },
     }),
