@@ -30,6 +30,7 @@ import {
 import {
   getPreqstationConfigPath,
   getPreqstationDispatchHome,
+  getPreqstationErrorLogPath,
   getPreqstationOauthPath,
   writePreqstationConfig as defaultWritePreqstationConfig,
 } from "../preqstation-config.mjs";
@@ -180,14 +181,12 @@ const HELP_SECTIONS = [
       `${CLI_COMMAND_NAME} help`,
       `${CLI_COMMAND_NAME} --version`,
     ],
+    advanced: [`${CLI_COMMAND_NAME} --debug status`],
   },
 ];
 
 function getDispatchHome(env) {
-  return (
-    env.PREQSTATION_DISPATCH_HOME ||
-    path.join(resolveDefaultUserHome(env), ".preqstation-dispatch")
-  );
+  return getPreqstationDispatchHome(env);
 }
 
 function getAuthHome(env) {
@@ -2202,7 +2201,7 @@ async function handleMcpCommand({
 
   const result = await callPreqstationMcpToolFn({
     serverUrl,
-    oauthPath: path.join(getDispatchHome(env), "oauth.json"),
+    oauthPath: getPreqstationOauthPath(env),
     toolName,
     toolArguments: parseMcpToolArguments(options),
     env,
@@ -2668,6 +2667,60 @@ function writeDispatchFailure({ stdout, stderr, error }) {
   stderr.write(`error [${serialized.code}]: ${serialized.message}\n`);
 }
 
+function isDebugEnabled(env, argv) {
+  const envValue = String(env?.PREQSTATION_DEBUG || "").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(envValue) || argv.includes("--debug");
+}
+
+function stripGlobalDebugFlag(argv) {
+  return argv.filter((arg) => arg !== "--debug");
+}
+
+function createErrorLogEntry({ error, argv }) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    argv,
+  };
+
+  if (isDispatchError(error)) {
+    payload.error = serializeDispatchError(error);
+  } else {
+    payload.error = {
+      name: error instanceof Error ? error.name : "Error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (error instanceof Error && error.stack) {
+    payload.stack = error.stack;
+  }
+
+  return `${JSON.stringify(payload)}\n`;
+}
+
+async function appendCliErrorLog({ error, env, argv }) {
+  const logPath = getPreqstationErrorLogPath(env);
+  try {
+    await fs.mkdir(path.dirname(logPath), { recursive: true });
+    await fs.appendFile(logPath, createErrorLogEntry({ error, argv }), "utf8");
+    return logPath;
+  } catch {
+    return null;
+  }
+}
+
+function writeDebugErrorDetails({ stderr, error, logPath, debugEnabled }) {
+  if (!debugEnabled) {
+    return;
+  }
+  if (logPath) {
+    stderr.write(`debug: wrote error log to ${logPath}\n`);
+  }
+  if (error instanceof Error && error.stack) {
+    stderr.write(`${error.stack}\n`);
+  }
+}
+
 export async function runDispatcherCli({
   argv,
   stdin = process.stdin,
@@ -2697,7 +2750,9 @@ export async function runDispatcherCli({
   logoutPreqstationFn = defaultLogoutPreqstation,
   writePreqstationConfigFn = defaultWritePreqstationConfig,
 }) {
-  const [command, ...args] = argv;
+  const originalArgv = Array.isArray(argv) ? argv : [];
+  const debugEnabled = isDebugEnabled(env, originalArgv);
+  const [command, ...args] = stripGlobalDebugFlag(originalArgv);
 
   try {
     if (!command || command === "--help" || command === "help") {
@@ -2870,12 +2925,25 @@ export async function runDispatcherCli({
     writeDispatchResult({ stdout, parsed, result });
     return 0;
   } catch (error) {
+    const errorLogPath = await appendCliErrorLog({ error, env, argv: originalArgv });
     if (isDispatchError(error)) {
       writeDispatchFailure({ stdout, stderr, error });
+      writeDebugErrorDetails({
+        stderr,
+        error,
+        logPath: errorLogPath,
+        debugEnabled,
+      });
       return 1;
     }
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`error: ${message}\n`);
+    writeDebugErrorDetails({
+      stderr,
+      error,
+      logPath: errorLogPath,
+      debugEnabled,
+    });
     return 1;
   }
 }

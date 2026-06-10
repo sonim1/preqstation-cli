@@ -30,12 +30,21 @@ async function readJsonFile(filePath) {
   return JSON.parse(await fs.readFile(filePath, "utf8"));
 }
 
+function getOauthCacheReadPaths(oauthPath) {
+  const legacyOauthPath = oauthPath.replace(
+    `${path.sep}.preqstation${path.sep}oauth.json`,
+    `${path.sep}.preqstation-dispatch${path.sep}oauth.json`,
+  );
+  return legacyOauthPath === oauthPath ? [oauthPath] : [oauthPath, legacyOauthPath];
+}
+
 async function readOauthCache(oauthPath) {
-  try {
-    return await readJsonFile(oauthPath);
-  } catch {
-    return null;
+  for (const candidatePath of getOauthCacheReadPaths(oauthPath)) {
+    try {
+      return await readJsonFile(candidatePath);
+    } catch {}
   }
+  return null;
 }
 
 async function writeOauthCache(oauthPath, cache) {
@@ -81,7 +90,11 @@ export async function logoutPreqstation({ oauthPath } = {}) {
   if (!normalizeString(oauthPath)) {
     throw new Error("oauthPath is required to remove PREQSTATION OAuth credentials");
   }
-  await fs.rm(oauthPath, { force: true });
+  await Promise.all(
+    getOauthCacheReadPaths(oauthPath).map((candidatePath) =>
+      fs.rm(candidatePath, { force: true }),
+    ),
+  );
 }
 
 async function readJsonResponse(response, context) {

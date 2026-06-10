@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { resolveDefaultUserHome } from "./project-mapping.mjs";
-import { readPreqstationConfig } from "./preqstation-config.mjs";
+import {
+  getPreqstationOauthPaths,
+  readPreqstationConfig,
+} from "./preqstation-config.mjs";
 
 const execFileAsync = promisify(execFile);
 const PREQSTATION_MCP_NAME = "preqstation";
@@ -223,40 +224,23 @@ function isLocalhostHttp(url) {
   return /^http:\/\/localhost(?::\d+)?(?:\/.*)?$/iu.test(url);
 }
 
-function getDefaultDispatchHome(env = process.env) {
-  const explicitHome = String(env?.PREQSTATION_DISPATCH_HOME || "").trim();
-  if (explicitHome) {
-    return path.resolve(explicitHome);
-  }
-
-  const currentHome = String(env?.HOME || "").trim();
-  if (
-    currentHome &&
-    !currentHome.includes(`${path.sep}.hermes${path.sep}profiles${path.sep}`) &&
-    !currentHome.endsWith(`${path.sep}.hermes`)
-  ) {
-    return path.join(path.resolve(currentHome), ".preqstation-dispatch");
-  }
-
-  return path.join(resolveDefaultUserHome(env), ".preqstation-dispatch");
-}
-
 async function readSharedOauthServerUrl({
   env = process.env,
   readFile = fs.readFile,
 } = {}) {
-  const oauthPath = path.join(getDefaultDispatchHome(env), "oauth.json");
-
-  try {
-    const content = await readFile(oauthPath, "utf8");
-    const parsed = JSON.parse(content);
-    return (
-      maybeNormalizePreqstationServerUrl(parsed?.discoveryState?.authorizationServerUrl) ??
-      maybeNormalizePreqstationServerUrl(parsed?.discoveryState?.authorizationServerMetadata?.issuer)
-    );
-  } catch {
-    return null;
+  for (const oauthPath of getPreqstationOauthPaths(env)) {
+    try {
+      const content = await readFile(oauthPath, "utf8");
+      const parsed = JSON.parse(content);
+      const serverUrl =
+        maybeNormalizePreqstationServerUrl(parsed?.discoveryState?.authorizationServerUrl) ??
+        maybeNormalizePreqstationServerUrl(parsed?.discoveryState?.authorizationServerMetadata?.issuer);
+      if (serverUrl) {
+        return serverUrl;
+      }
+    } catch {}
   }
+  return null;
 }
 
 export function normalizePreqstationServerUrl(value) {
@@ -289,17 +273,17 @@ export async function resolveDefaultPreqstationServerUrl({
     }
   }
 
-  const configuredServerUrl = (await readPreqstationConfig({ env, readFile })).server_url;
-  if (configuredServerUrl) {
-    return configuredServerUrl;
-  }
-
   const sharedOauthServerUrl = await readSharedOauthServerUrl({
     env,
     readFile,
   });
   if (sharedOauthServerUrl) {
     return sharedOauthServerUrl;
+  }
+
+  const configuredServerUrl = (await readPreqstationConfig({ env, readFile })).server_url;
+  if (configuredServerUrl) {
+    return configuredServerUrl;
   }
 
   const discoveredServerUrls = new Set();

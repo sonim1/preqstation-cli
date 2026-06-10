@@ -106,6 +106,34 @@ test("loads shared PREQ dispatch mappings from projects.json", async () => {
   });
 });
 
+test("loads legacy shared mappings when the new ~/.preqstation mapping is absent", async () => {
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "preqstation-dispatcher-legacy-projects-json-"),
+  );
+  const userHome = path.join(tempDir, "home");
+  const mappingPath = path.join(userHome, ".preqstation", "projects.json");
+  const legacyMappingPath = path.join(userHome, ".preqstation-dispatch", "projects.json");
+  await fs.mkdir(path.dirname(legacyMappingPath), { recursive: true });
+  await fs.writeFile(
+    legacyMappingPath,
+    JSON.stringify(
+      {
+        projects: {
+          PROJ: "/Users/example/projects/projects-manager",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  const mappings = await loadDispatchProjectMappings(mappingPath);
+
+  assert.deepEqual(mappings, {
+    PROJ: "/Users/example/projects/projects-manager",
+  });
+});
+
 test("matches GitLab SSH remotes to HTTPS project URLs", async () => {
   const tempDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "preqstation-dispatcher-gitlab-ssh-"),

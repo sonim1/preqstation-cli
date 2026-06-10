@@ -287,10 +287,7 @@ test("resolveDefaultPreqstationServerUrl falls back to the shared dispatcher OAu
     },
     readFile: async (filePath, encoding) => {
       assert.equal(encoding, "utf8");
-      if (filePath === "/Users/tester/.preqstation-dispatch/config.json") {
-        throw new Error("no CLI config");
-      }
-      assert.equal(filePath, "/Users/tester/.preqstation-dispatch/oauth.json");
+      assert.equal(filePath, "/Users/tester/.preqstation/oauth.json");
       return JSON.stringify({
         discoveryState: {
           authorizationServerUrl: "https://oauth-preq.example.com/",
@@ -305,7 +302,7 @@ test("resolveDefaultPreqstationServerUrl falls back to the shared dispatcher OAu
   assert.equal(serverUrl, "https://oauth-preq.example.com");
 });
 
-test("resolveDefaultPreqstationServerUrl prefers CLI config before the OAuth cache", async () => {
+test("resolveDefaultPreqstationServerUrl prefers the OAuth cache before stale CLI config", async () => {
   const readFiles = [];
   const serverUrl = await resolveDefaultPreqstationServerUrl({
     runtimes: ["claude-code", "codex"],
@@ -315,8 +312,43 @@ test("resolveDefaultPreqstationServerUrl prefers CLI config before the OAuth cac
     },
     readFile: async (filePath, encoding) => {
       readFiles.push({ filePath, encoding });
-      assert.equal(filePath, "/Users/tester/.preqstation-dispatch/config.json");
+      assert.equal(filePath, "/Users/tester/.preqstation/oauth.json");
       assert.equal(encoding, "utf8");
+      return JSON.stringify({
+        discoveryState: {
+          authorizationServerUrl: "https://oauth-preq.example.com/",
+        },
+      });
+    },
+    exec: async () => {
+      throw new Error("should not inspect runtimes when OAuth cache provides the server URL");
+    },
+  });
+
+  assert.equal(serverUrl, "https://oauth-preq.example.com");
+  assert.deepEqual(readFiles, [
+    {
+      filePath: "/Users/tester/.preqstation/oauth.json",
+      encoding: "utf8",
+    },
+  ]);
+});
+
+test("resolveDefaultPreqstationServerUrl uses CLI config when OAuth is absent", async () => {
+  const readFiles = [];
+  const serverUrl = await resolveDefaultPreqstationServerUrl({
+    runtimes: ["claude-code", "codex"],
+    env: {
+      PATH: process.env.PATH,
+      HOME: "/Users/tester",
+    },
+    readFile: async (filePath, encoding) => {
+      readFiles.push({ filePath, encoding });
+      assert.equal(encoding, "utf8");
+      if (filePath.endsWith("oauth.json")) {
+        throw new Error("no OAuth cache");
+      }
+      assert.equal(filePath, "/Users/tester/.preqstation/config.json");
       return JSON.stringify({
         server_url: "https://config-preq.example.com/",
       });
@@ -329,7 +361,15 @@ test("resolveDefaultPreqstationServerUrl prefers CLI config before the OAuth cac
   assert.equal(serverUrl, "https://config-preq.example.com");
   assert.deepEqual(readFiles, [
     {
-      filePath: "/Users/tester/.preqstation-dispatch/config.json",
+      filePath: "/Users/tester/.preqstation/oauth.json",
+      encoding: "utf8",
+    },
+    {
+      filePath: "/Users/tester/.preqstation-dispatch/oauth.json",
+      encoding: "utf8",
+    },
+    {
+      filePath: "/Users/tester/.preqstation/config.json",
       encoding: "utf8",
     },
   ]);
@@ -343,9 +383,7 @@ test("resolveDefaultPreqstationServerUrl ignores invalid CLI config and falls ba
       HOME: "/Users/tester",
     },
     readFile: async (filePath) => {
-      if (filePath.endsWith("config.json")) {
-        return JSON.stringify({ server_url: "http://not-localhost.example.com" });
-      }
+      assert.equal(filePath, "/Users/tester/.preqstation/oauth.json");
       return JSON.stringify({
         discoveryState: {
           authorizationServerUrl: "https://oauth-preq.example.com/",

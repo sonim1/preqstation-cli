@@ -928,7 +928,7 @@ test("setup set uses the user's shared mapping path outside Hermes profile HOME"
   const hermesHome = path.join(userHome, ".hermes", "profiles", "preq-coder");
   const hermesSubprocessHome = path.join(hermesHome, "home");
   const projectPath = path.join(tempDir, "project");
-  const mappingPath = path.join(userHome, ".preqstation-dispatch", "projects.json");
+  const mappingPath = path.join(userHome, ".preqstation", "projects.json");
 
   await fs.mkdir(hermesSubprocessHome, { recursive: true });
   await fs.mkdir(projectPath, { recursive: true });
@@ -963,7 +963,7 @@ test("setup auto scans the user's projects root outside Hermes profile HOME", as
   const hermesSubprocessHome = path.join(hermesHome, "home");
   const repoRoot = path.join(userHome, "projects");
   const projectPath = path.join(repoRoot, "projects-manager");
-  const mappingPath = path.join(userHome, ".preqstation-dispatch", "projects.json");
+  const mappingPath = path.join(userHome, ".preqstation", "projects.json");
 
   await fs.mkdir(hermesSubprocessHome, { recursive: true });
   await fs.mkdir(projectPath, { recursive: true });
@@ -1004,7 +1004,7 @@ test("run-json uses the user's shared mapping path outside Hermes profile HOME",
   const userHome = path.join(tempDir, "user-home");
   const hermesHome = path.join(userHome, ".hermes", "profiles", "preq-coder");
   const hermesSubprocessHome = path.join(hermesHome, "home");
-  const mappingPath = path.join(userHome, ".preqstation-dispatch", "projects.json");
+  const mappingPath = path.join(userHome, ".preqstation", "projects.json");
   const payloadPath = path.join(tempDir, "payload.json");
 
   await fs.mkdir(hermesSubprocessHome, { recursive: true });
@@ -1057,7 +1057,7 @@ test("mcp call invokes PREQ MCP through the shared OAuth cache", async () => {
     stderr: { write: () => {} },
     env: {
       HOME: userHome,
-      PREQSTATION_DISPATCH_HOME: path.join(userHome, ".preqstation-dispatch"),
+      PREQSTATION_DISPATCH_HOME: path.join(userHome, ".preqstation"),
     },
     resolveDefaultPreqstationServerUrlFn: async () => "https://preq.example.com",
     callPreqstationMcpToolFn: async (params) => {
@@ -1072,7 +1072,7 @@ test("mcp call invokes PREQ MCP through the shared OAuth cache", async () => {
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].serverUrl, "https://preq.example.com");
-  assert.equal(calls[0].oauthPath, path.join(userHome, ".preqstation-dispatch", "oauth.json"));
+  assert.equal(calls[0].oauthPath, path.join(userHome, ".preqstation", "oauth.json"));
   assert.equal(calls[0].toolName, "preq_get_task");
   assert.deepEqual(calls[0].toolArguments, { taskId: "PROJ-123" });
   assert.deepEqual(JSON.parse(stdout.join("")), { task: { key: "PROJ-123" } });
@@ -1112,15 +1112,20 @@ test("mcp disable removes only the legacy runtime MCP registration", async () =>
 test("auth status reports server URL, inspected home, and OAuth cache readiness", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-auth-status-"));
   const userHome = path.join(tempDir, "home");
-  const dispatchHome = path.join(userHome, ".preqstation-dispatch");
+  const dispatchHome = path.join(userHome, ".preqstation");
   await fs.mkdir(dispatchHome, { recursive: true });
   await fs.writeFile(
     path.join(dispatchHome, "config.json"),
-    JSON.stringify({ server_url: "https://preq.example.com" }),
+    JSON.stringify({ server_url: "https://stale-preq.example.com" }),
   );
   await fs.writeFile(
     path.join(dispatchHome, "oauth.json"),
-    JSON.stringify({ tokens: { access_token: "cached-token" } }),
+    JSON.stringify({
+      discoveryState: {
+        authorizationServerUrl: "https://preq.example.com",
+      },
+      tokens: { access_token: "cached-token" },
+    }),
   );
 
   const stdout = [];
@@ -1147,6 +1152,30 @@ test("auth status reports server URL, inspected home, and OAuth cache readiness"
     oauth_path: path.join(dispatchHome, "oauth.json"),
     oauth_cache_exists: true,
   });
+});
+
+test("CLI writes failures to the shared ~/.preqstation error log", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-error-log-"));
+  const userHome = path.join(tempDir, "home");
+  const stdout = [];
+  const stderr = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["--debug", "whoami"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: (value) => stderr.push(value) },
+    env: {
+      HOME: userHome,
+      PATH: process.env.PATH,
+    },
+  });
+
+  const logPath = path.join(userHome, ".preqstation", "logs", "error.log");
+  const log = await fs.readFile(logPath, "utf8");
+  assert.equal(exitCode, 1);
+  assert.match(stderr.join(""), new RegExp(escapeRegExp(logPath)));
+  assert.match(log, /auth_identity_unavailable/);
+  assert.match(log, /preqstation whoami requires/);
 });
 
 test("auth status honors PREQSTATION_TOKEN before the OAuth cache", async () => {

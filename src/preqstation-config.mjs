@@ -3,6 +3,9 @@ import path from "node:path";
 
 import { resolveDefaultUserHome } from "./project-mapping.mjs";
 
+const PREQSTATION_HOME_DIR = ".preqstation";
+const LEGACY_PREQSTATION_HOME_DIR = ".preqstation-dispatch";
+
 function normalizeConfigServerUrl(value) {
   const serverUrl = String(value || "").trim().replace(/\/+$/u, "");
   if (!serverUrl) {
@@ -19,22 +22,34 @@ function normalizeConfigServerUrl(value) {
   return serverUrl;
 }
 
-export function getPreqstationDispatchHome(env = process.env) {
-  const explicitHome = String(env?.PREQSTATION_DISPATCH_HOME || "").trim();
-  if (explicitHome) {
-    return path.resolve(explicitHome);
-  }
-
+function resolvePreqstationHomeBase(env = process.env) {
   const currentHome = String(env?.HOME || "").trim();
   if (
     currentHome &&
     !currentHome.includes(`${path.sep}.hermes${path.sep}profiles${path.sep}`) &&
     !currentHome.endsWith(`${path.sep}.hermes`)
   ) {
-    return path.join(path.resolve(currentHome), ".preqstation-dispatch");
+    return path.resolve(currentHome);
   }
 
-  return path.join(resolveDefaultUserHome(env), ".preqstation-dispatch");
+  return resolveDefaultUserHome(env);
+}
+
+function hasExplicitDispatchHome(env = process.env) {
+  return Boolean(String(env?.PREQSTATION_DISPATCH_HOME || "").trim());
+}
+
+export function getPreqstationDispatchHome(env = process.env) {
+  const explicitHome = String(env?.PREQSTATION_DISPATCH_HOME || "").trim();
+  if (explicitHome) {
+    return path.resolve(explicitHome);
+  }
+
+  return path.join(resolvePreqstationHomeBase(env), PREQSTATION_HOME_DIR);
+}
+
+export function getLegacyPreqstationDispatchHome(env = process.env) {
+  return path.join(resolvePreqstationHomeBase(env), LEGACY_PREQSTATION_HOME_DIR);
 }
 
 export function getPreqstationConfigPath(env = process.env) {
@@ -45,25 +60,54 @@ export function getPreqstationOauthPath(env = process.env) {
   return path.join(getPreqstationDispatchHome(env), "oauth.json");
 }
 
+export function getPreqstationErrorLogPath(env = process.env) {
+  return path.join(getPreqstationDispatchHome(env), "logs", "error.log");
+}
+
+export function getPreqstationConfigPaths(env = process.env) {
+  const primaryPath = getPreqstationConfigPath(env);
+  if (hasExplicitDispatchHome(env)) {
+    return [primaryPath];
+  }
+
+  const legacyPath = path.join(getLegacyPreqstationDispatchHome(env), "config.json");
+  return legacyPath === primaryPath ? [primaryPath] : [primaryPath, legacyPath];
+}
+
+export function getPreqstationOauthPaths(env = process.env) {
+  const primaryPath = getPreqstationOauthPath(env);
+  if (hasExplicitDispatchHome(env)) {
+    return [primaryPath];
+  }
+
+  const legacyPath = path.join(getLegacyPreqstationDispatchHome(env), "oauth.json");
+  return legacyPath === primaryPath ? [primaryPath] : [primaryPath, legacyPath];
+}
+
 export async function readPreqstationConfig({
   env = process.env,
   readFile = fs.readFile,
 } = {}) {
-  const configPath = getPreqstationConfigPath(env);
-  try {
-    const parsed = JSON.parse(await readFile(configPath, "utf8"));
-    return {
-      config_path: configPath,
-      server_url: parsed?.server_url
+  const [primaryPath, ...fallbackPaths] = getPreqstationConfigPaths(env);
+  for (const configPath of [primaryPath, ...fallbackPaths]) {
+    try {
+      const parsed = JSON.parse(await readFile(configPath, "utf8"));
+      const serverUrl = parsed?.server_url
         ? normalizeConfigServerUrl(parsed.server_url)
-        : null,
-    };
-  } catch {
-    return {
-      config_path: configPath,
-      server_url: null,
-    };
+        : null;
+      if (serverUrl) {
+        return {
+          config_path: configPath,
+          server_url: serverUrl,
+        };
+      }
+    } catch {}
   }
+
+  return {
+    config_path: primaryPath,
+    server_url: null,
+  };
 }
 
 export async function writePreqstationConfig({

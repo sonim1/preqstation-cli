@@ -57,7 +57,7 @@ export function getDefaultRepoRoots(env = process.env) {
 }
 
 export function getDefaultSharedMappingPath(env = process.env) {
-  return path.join(resolveDefaultUserHome(env), ".preqstation-dispatch", "projects.json");
+  return path.join(resolveDefaultUserHome(env), ".preqstation", "projects.json");
 }
 
 export const DEFAULT_REPO_ROOTS = getDefaultRepoRoots();
@@ -243,7 +243,19 @@ export async function loadProjectMappings(memoryPath) {
 export async function loadDispatchProjectMappings(
   mappingPath = DEFAULT_SHARED_MAPPING_PATH,
 ) {
-  const content = await fs.readFile(mappingPath, "utf8");
+  let content;
+  try {
+    content = await fs.readFile(mappingPath, "utf8");
+  } catch (error) {
+    const legacyMappingPath = mappingPath.replace(
+      `${path.sep}.preqstation${path.sep}projects.json`,
+      `${path.sep}.preqstation-dispatch${path.sep}projects.json`,
+    );
+    if (error?.code !== "ENOENT" || legacyMappingPath === mappingPath) {
+      throw error;
+    }
+    content = await fs.readFile(legacyMappingPath, "utf8");
+  }
   const parsed = JSON.parse(content);
   const mappings = {};
 

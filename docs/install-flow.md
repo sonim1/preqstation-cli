@@ -66,9 +66,10 @@ The default value is resolved in this order:
 
 1. `PREQSTATION_SERVER_URL`
 2. `PREQSTATION_API_URL`
-3. `~/.preqstation-dispatch/oauth.json`
-4. legacy existing runtime MCP registrations
-5. fallback placeholder
+3. `~/.preqstation/oauth.json`
+4. CLI config in `~/.preqstation/config.json`
+5. legacy existing runtime MCP registrations
+6. fallback placeholder
 
 Normalization rules:
 - trim whitespace
@@ -223,8 +224,9 @@ Interactive uninstall is the matching cleanup flow:
 ### Shared dispatcher state
 
 ```text
-~/.preqstation-dispatch/
-~/.preqstation-dispatch/oauth.json
+~/.preqstation/
+~/.preqstation/oauth.json
+~/.preqstation/logs/error.log
 ```
 
 ### Hermes

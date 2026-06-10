@@ -89,7 +89,7 @@ The profile should have access to:
 
 - terminal/tool execution
 - the `preqstation` binary
-- the local project checkouts mapped in `~/.preqstation-dispatch/projects.json`
+- the local project checkouts mapped in `~/.preqstation/projects.json`
 - the worker CLIs it may launch
 - the PREQSTATION MCP/API credentials required by the launched workers
 

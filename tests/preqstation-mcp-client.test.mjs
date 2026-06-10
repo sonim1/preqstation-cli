@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   callPreqstationMcpTool,
   fetchPreqstationProjectsFromMcp,
+  inspectPreqstationAuth,
 } from "../src/preqstation-mcp-client.mjs";
 
 function jsonResponse(body, init = {}) {
@@ -96,6 +97,31 @@ test("fetchPreqstationProjectsFromMcp calls preq_list_projects with a cached OAu
     },
   ]);
   assert.equal(calls.length, 3);
+});
+
+test("inspectPreqstationAuth reads a legacy OAuth cache when the new cache is absent", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-mcp-client-legacy-"));
+  const userHome = path.join(tempDir, "home");
+  const legacyOauthPath = path.join(userHome, ".preqstation-dispatch", "oauth.json");
+  await fs.mkdir(path.dirname(legacyOauthPath), { recursive: true });
+  await fs.writeFile(
+    legacyOauthPath,
+    JSON.stringify({
+      tokens: {
+        access_token: "legacy-token",
+      },
+    }),
+  );
+
+  const auth = await inspectPreqstationAuth({
+    oauthPath: path.join(userHome, ".preqstation", "oauth.json"),
+  });
+
+  assert.deepEqual(auth, {
+    authenticated: true,
+    auth_source: "oauth_cache",
+    oauth_cache_exists: true,
+  });
 });
 
 test("callPreqstationMcpTool calls an arbitrary MCP tool with cached OAuth", async () => {
