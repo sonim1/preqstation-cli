@@ -160,6 +160,8 @@ test("rejects an existing local dispatch branch with unique commits when stale r
   );
 
   git(["checkout", "-b", "task/proj-stale-with-work"], cloneDir);
+  git(["config", "user.name", "Codex"], cloneDir);
+  git(["config", "user.email", "codex@example.com"], cloneDir);
   await fs.writeFile(path.join(cloneDir, "work.txt"), "work\n");
   git(["add", "work.txt"], cloneDir);
   git(["commit", "-m", "work"], cloneDir);
