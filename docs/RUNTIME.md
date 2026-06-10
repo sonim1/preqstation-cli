@@ -19,7 +19,7 @@ Before launch, the dispatcher checks CLI auth readiness against the detached wor
 
 PREQ native MCP is closed as much as each engine supports:
 
-- Codex launches with `mcp_servers.preqstation.enabled=false`.
+- Codex launches with `mcp_servers={}` so removed/legacy PREQ MCP config cannot be loaded.
 - Gemini CLI no longer allowlists the `preqstation` MCP server.
 - Claude Code launches with `--strict-mcp-config` and an empty per-run MCP config file.
 

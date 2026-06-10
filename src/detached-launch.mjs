@@ -143,7 +143,7 @@ function buildEngineCommand(engine, platform = process.platform, model = null, o
       return `${envPrefix} GEMINI_SANDBOX=false gemini${modelFlag} --skip-trust --yolo --extensions '' -p ${shellQuote(BOOTSTRAP_PROMPT)}`;
     case "codex":
     default:
-      return `${envPrefix} codex --ask-for-approval never exec -c ${shellQuote("mcp_servers.preqstation.enabled=false")}${modelFlag} --sandbox danger-full-access ${shellQuote(BOOTSTRAP_PROMPT)}`;
+      return `${envPrefix} codex --ask-for-approval never exec -c ${shellQuote("mcp_servers={}")}${modelFlag} --sandbox danger-full-access ${shellQuote(BOOTSTRAP_PROMPT)}`;
   }
 }
 
