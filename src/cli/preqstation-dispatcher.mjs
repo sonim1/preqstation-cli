@@ -17,11 +17,21 @@ import { parseDispatchMessage } from "../parse-dispatch-message.mjs";
 import {
   callPreqstationMcpTool as defaultCallPreqstationMcpTool,
   fetchPreqstationProjectsFromMcp as defaultFetchPreqstationProjectsFromMcp,
+  inspectPreqstationAuth as defaultInspectPreqstationAuth,
+  loginPreqstation as defaultLoginPreqstation,
+  logoutPreqstation as defaultLogoutPreqstation,
 } from "../preqstation-mcp-client.mjs";
 import {
+  DispatchError,
   isDispatchError,
   serializeDispatchError,
 } from "../dispatch-error.mjs";
+import {
+  getPreqstationConfigPath,
+  getPreqstationDispatchHome,
+  getPreqstationOauthPath,
+  writePreqstationConfig as defaultWritePreqstationConfig,
+} from "../preqstation-config.mjs";
 import {
   getDefaultRepoRoots,
   getDefaultSharedMappingPath,
@@ -135,6 +145,15 @@ const HELP_SECTIONS = [
     ],
   },
   {
+    title: "Auth",
+    commands: [
+      `${CLI_COMMAND_NAME} auth login --server-url https://your-preqstation-domain.vercel.app`,
+      `${CLI_COMMAND_NAME} auth status`,
+      `${CLI_COMMAND_NAME} auth logout`,
+      `${CLI_COMMAND_NAME} whoami`,
+    ],
+  },
+  {
     title: "Info",
     commands: [
       `${CLI_COMMAND_NAME} status`,
@@ -150,6 +169,10 @@ function getDispatchHome(env) {
     env.PREQSTATION_DISPATCH_HOME ||
     path.join(resolveDefaultUserHome(env), ".preqstation-dispatch")
   );
+}
+
+function getAuthHome(env) {
+  return path.dirname(getPreqstationDispatchHome(env));
 }
 
 function getProjectsFile(env) {
@@ -1305,6 +1328,20 @@ async function runInstallSetupAuto({
   });
 }
 
+async function persistInstallServerUrl({
+  installResult,
+  env,
+  writePreqstationConfigFn,
+}) {
+  if (installResult?.ok === false || !installResult?.preqstation_server_url) {
+    return null;
+  }
+  return writePreqstationConfigFn({
+    env,
+    serverUrl: installResult.preqstation_server_url,
+  });
+}
+
 async function runMcpBackedSetupAuto({
   env,
   stderr,
@@ -1410,6 +1447,7 @@ async function handleInstallCommand({
   runInstallWizard = defaultRunInstallWizard,
   fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
+  writePreqstationConfigFn = defaultWritePreqstationConfig,
 }) {
   const { options, positional } = parseOptions(args);
   const [target] = positional;
@@ -1420,6 +1458,11 @@ async function handleInstallCommand({
       outputStream: stdout,
       env,
       force: options.force === "true",
+    });
+    await persistInstallServerUrl({
+      installResult: result,
+      env,
+      writePreqstationConfigFn,
     });
     const setupAutoResult = await runInstallSetupAuto({
       installResult: result,
@@ -1951,6 +1994,116 @@ async function handleMcpCommand({
   stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+function createAuthPaths(env) {
+  const dispatchHome = getPreqstationDispatchHome(env);
+  return {
+    home: getAuthHome(env),
+    dispatch_home: dispatchHome,
+    config_path: getPreqstationConfigPath(env),
+    oauth_path: getPreqstationOauthPath(env),
+  };
+}
+
+async function handleAuthCommand({
+  args,
+  stdout,
+  stderr,
+  env,
+  resolveDefaultPreqstationServerUrlFn,
+  loginPreqstationFn,
+  inspectPreqstationAuthFn,
+  logoutPreqstationFn,
+  writePreqstationConfigFn,
+}) {
+  const { options, positional } = parseOptions(args);
+  const [subcommand] = positional;
+  const paths = createAuthPaths(env);
+
+  if (subcommand === "status") {
+    const [serverUrl, auth] = await Promise.all([
+      resolveDefaultPreqstationServerUrlFn({ env }).catch(() => null),
+      inspectPreqstationAuthFn({ oauthPath: paths.oauth_path, env }),
+    ]);
+    const payload = {
+      ok: Boolean(serverUrl) && auth.authenticated,
+      action: "auth_status",
+      authenticated: auth.authenticated,
+      auth_source: auth.auth_source,
+      server_url: serverUrl,
+      ...paths,
+      oauth_cache_exists: auth.oauth_cache_exists,
+    };
+    stdout.write(`${JSON.stringify(payload)}\n`);
+    return payload.ok ? 0 : 1;
+  }
+
+  if (subcommand === "login") {
+    const discoveredServerUrl =
+      options["server-url"] ||
+      (await resolveDefaultPreqstationServerUrlFn({ env }).catch(() => null));
+    if (!discoveredServerUrl) {
+      throw new DispatchError(
+        "worker_auth_unready",
+        `PREQSTATION server URL is required. Run ${CLI_COMMAND_NAME} auth login --server-url https://<your-domain>.`,
+        {
+          suggested_action: "pass_server_url_to_auth_login",
+          commands: [
+            `${CLI_COMMAND_NAME} auth login --server-url https://<your-domain>`,
+          ],
+          ...paths,
+        },
+      );
+    }
+
+    const config = await writePreqstationConfigFn({
+      env,
+      serverUrl: discoveredServerUrl,
+    });
+    await loginPreqstationFn({
+      serverUrl: config.server_url,
+      oauthPath: paths.oauth_path,
+      env,
+      onLoginUrl: (loginUrl) => {
+        stderr.write(`Open PREQSTATION login URL: ${loginUrl}\n`);
+      },
+    });
+
+    stdout.write(
+      `${JSON.stringify({
+        ok: true,
+        action: "logged_in",
+        server_url: config.server_url,
+        ...paths,
+      })}\n`,
+    );
+    return 0;
+  }
+
+  if (subcommand === "logout") {
+    await logoutPreqstationFn({ oauthPath: paths.oauth_path });
+    stdout.write(
+      `${JSON.stringify({
+        ok: true,
+        action: "logged_out",
+        oauth_path: paths.oauth_path,
+      })}\n`,
+    );
+    return 0;
+  }
+
+  throw new Error(`Usage: ${CLI_COMMAND_NAME} auth [login|status|logout]`);
+}
+
+function createWhoamiUnavailableError() {
+  return new DispatchError(
+    "auth_identity_unavailable",
+    "preqstation whoami requires a PREQSTATION server identity endpoint or MCP tool, which is not available yet.",
+    {
+      suggested_action: "add_server_identity_endpoint_then_wire_whoami",
+    },
+  );
+}
+
 function writeDispatchResult({ stdout, parsed, result }) {
   stdout.write(
     `${JSON.stringify({
@@ -2003,6 +2156,10 @@ export async function runDispatcherCli({
   resolveDefaultPreqstationServerUrlFn = resolveDefaultPreqstationServerUrl,
   fetchPreqstationProjectsFn = defaultFetchPreqstationProjectsFromMcp,
   callPreqstationMcpToolFn = defaultCallPreqstationMcpTool,
+  loginPreqstationFn = defaultLoginPreqstation,
+  inspectPreqstationAuthFn = defaultInspectPreqstationAuth,
+  logoutPreqstationFn = defaultLogoutPreqstation,
+  writePreqstationConfigFn = defaultWritePreqstationConfig,
 }) {
   const [command, ...args] = argv;
 
@@ -2039,6 +2196,7 @@ export async function runDispatcherCli({
         runInstallWizard,
         fetchPreqstationProjectsFn,
         resolveDefaultPreqstationServerUrlFn,
+        writePreqstationConfigFn,
       });
     }
 
@@ -2118,6 +2276,24 @@ export async function runDispatcherCli({
     if (command === "sync") {
       await handlePlatformCommand({ command, args, stdout, env });
       return 0;
+    }
+
+    if (command === "auth") {
+      return handleAuthCommand({
+        args,
+        stdout,
+        stderr,
+        env,
+        resolveDefaultPreqstationServerUrlFn,
+        loginPreqstationFn,
+        inspectPreqstationAuthFn,
+        logoutPreqstationFn,
+        writePreqstationConfigFn,
+      });
+    }
+
+    if (command === "whoami") {
+      throw createWhoamiUnavailableError();
     }
 
     if (command === "mcp") {

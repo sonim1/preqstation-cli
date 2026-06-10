@@ -70,6 +70,8 @@ npx -y @sonim1/preqstation@latest status
 | `preqstation install` | Interactive setup for entrypoints, agent runtimes, MCP registration, and project mappings. |
 | `preqstation status` | Read-only installed-state summary for entrypoints, runtimes, MCP, and project mappings. |
 | `preqstation doctor` | Read-only health check for dispatcher configuration and runtime availability. |
+| `preqstation auth login` | Store the PREQSTATION server URL and create the shared OAuth cache. |
+| `preqstation auth status` | Read-only CLI auth readiness check, including the inspected home and OAuth path. |
 | `preqstation setup auto` | Discover local projects and save shared PREQ project mappings. |
 | `preqstation run` | Dispatch a PREQ task or project objective directly from the CLI. |
 | `preqstation uninstall` | Remove installed entrypoints, runtime support, or project mappings. |

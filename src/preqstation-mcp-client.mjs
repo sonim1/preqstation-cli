@@ -52,6 +52,38 @@ function resolveAccessToken({ env, oauthCache }) {
   return normalizeString(oauthCache?.tokens?.access_token);
 }
 
+export async function inspectPreqstationAuth({
+  oauthPath,
+  env = process.env,
+} = {}) {
+  if (!normalizeString(oauthPath)) {
+    throw new Error("oauthPath is required to inspect PREQSTATION OAuth credentials");
+  }
+
+  const oauthCache = await readOauthCache(oauthPath);
+  const envToken = normalizeString(env?.PREQSTATION_TOKEN);
+  if (envToken) {
+    return {
+      authenticated: true,
+      auth_source: "env_token",
+      oauth_cache_exists: Boolean(oauthCache),
+    };
+  }
+
+  return {
+    authenticated: Boolean(resolveAccessToken({ env, oauthCache })),
+    auth_source: resolveAccessToken({ env, oauthCache }) ? "oauth_cache" : null,
+    oauth_cache_exists: Boolean(oauthCache),
+  };
+}
+
+export async function logoutPreqstation({ oauthPath } = {}) {
+  if (!normalizeString(oauthPath)) {
+    throw new Error("oauthPath is required to remove PREQSTATION OAuth credentials");
+  }
+  await fs.rm(oauthPath, { force: true });
+}
+
 async function readJsonResponse(response, context) {
   const text = await response.text();
   if (!response.ok) {
@@ -250,6 +282,29 @@ async function loginWithOAuth({
   };
   await writeOauthCache(oauthPath, oauthCache);
   return oauthCache;
+}
+
+export async function loginPreqstation({
+  serverUrl,
+  oauthPath,
+  env = process.env,
+  fetchFn = globalThis.fetch,
+  openUrlFn = openBrowserUrl,
+  onLoginUrl,
+} = {}) {
+  if (typeof fetchFn !== "function") {
+    throw new Error("fetch is required to connect to PREQSTATION OAuth");
+  }
+  if (!normalizeString(oauthPath)) {
+    throw new Error("oauthPath is required to store PREQSTATION OAuth credentials");
+  }
+  return loginWithOAuth({
+    serverUrl: normalizePreqstationServerUrl(serverUrl),
+    oauthPath,
+    fetchFn,
+    openUrlFn,
+    onLoginUrl,
+  });
 }
 
 function parseServerSentEvent(text) {

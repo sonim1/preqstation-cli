@@ -711,6 +711,7 @@ test("setup auto renders saved and unmatched projects for interactive tty output
 
 test("install runs setup auto from PREQ projects after the wizard completes", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-dispatcher-install-auto-"));
+  const dispatchHome = path.join(tempDir, "dispatch");
   const mappingPath = path.join(tempDir, "projects.json");
   const repoRoot = path.join(tempDir, "repos");
   const projectPath = path.join(repoRoot, "projects-manager");
@@ -731,6 +732,7 @@ test("install runs setup auto from PREQ projects after the wizard completes", as
     env: {
       PREQSTATION_PROJECTS_FILE: mappingPath,
       PREQSTATION_REPO_ROOTS: repoRoot,
+      PREQSTATION_DISPATCH_HOME: dispatchHome,
     },
     runInstallWizard: async () => ({
       ok: true,
@@ -758,6 +760,9 @@ test("install runs setup auto from PREQ projects after the wizard completes", as
     projects: {
       PROJ: projectPath,
     },
+  });
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dispatchHome, "config.json"), "utf8")), {
+    server_url: "https://preq.example.com",
   });
   const result = JSON.parse(stdout.join(""));
   assert.deepEqual(result.project_setup.matched, {
@@ -1009,6 +1014,154 @@ test("mcp call invokes PREQ MCP through the shared OAuth cache", async () => {
   assert.equal(calls[0].toolName, "preq_get_task");
   assert.deepEqual(calls[0].toolArguments, { taskId: "PROJ-123" });
   assert.deepEqual(JSON.parse(stdout.join("")), { task: { key: "PROJ-123" } });
+});
+
+test("auth status reports server URL, inspected home, and OAuth cache readiness", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-auth-status-"));
+  const userHome = path.join(tempDir, "home");
+  const dispatchHome = path.join(userHome, ".preqstation-dispatch");
+  await fs.mkdir(dispatchHome, { recursive: true });
+  await fs.writeFile(
+    path.join(dispatchHome, "config.json"),
+    JSON.stringify({ server_url: "https://preq.example.com" }),
+  );
+  await fs.writeFile(
+    path.join(dispatchHome, "oauth.json"),
+    JSON.stringify({ tokens: { access_token: "cached-token" } }),
+  );
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["auth", "status"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      HOME: userHome,
+      PATH: process.env.PATH,
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    action: "auth_status",
+    authenticated: true,
+    auth_source: "oauth_cache",
+    server_url: "https://preq.example.com",
+    home: userHome,
+    dispatch_home: dispatchHome,
+    config_path: path.join(dispatchHome, "config.json"),
+    oauth_path: path.join(dispatchHome, "oauth.json"),
+    oauth_cache_exists: true,
+  });
+});
+
+test("auth status honors PREQSTATION_TOKEN before the OAuth cache", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-auth-status-token-"));
+  const userHome = path.join(tempDir, "home");
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["auth", "status"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      HOME: userHome,
+      PATH: process.env.PATH,
+      PREQSTATION_SERVER_URL: "https://preq.example.com",
+      PREQSTATION_TOKEN: "env-token",
+    },
+  });
+
+  const result = JSON.parse(stdout.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.authenticated, true);
+  assert.equal(result.auth_source, "env_token");
+  assert.equal(result.oauth_cache_exists, false);
+});
+
+test("auth login persists CLI server URL config and runs OAuth login", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-auth-login-"));
+  const dispatchHome = path.join(tempDir, "dispatch");
+  const stdout = [];
+  const loginCalls = [];
+
+  const exitCode = await runDispatcherCli({
+    argv: ["auth", "login", "--server-url", "https://preq.example.com/"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      PATH: process.env.PATH,
+      PREQSTATION_DISPATCH_HOME: dispatchHome,
+    },
+    loginPreqstationFn: async (params) => {
+      loginCalls.push(params);
+      return { tokens: { access_token: "new-token" } };
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(loginCalls.length, 1);
+  assert.equal(loginCalls[0].serverUrl, "https://preq.example.com");
+  assert.equal(loginCalls[0].oauthPath, path.join(dispatchHome, "oauth.json"));
+  assert.equal(typeof loginCalls[0].onLoginUrl, "function");
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dispatchHome, "config.json"), "utf8")), {
+    server_url: "https://preq.example.com",
+  });
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    action: "logged_in",
+    server_url: "https://preq.example.com",
+    home: tempDir,
+    dispatch_home: dispatchHome,
+    config_path: path.join(dispatchHome, "config.json"),
+    oauth_path: path.join(dispatchHome, "oauth.json"),
+  });
+});
+
+test("auth logout removes OAuth credentials without deleting config or mappings", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "preqstation-auth-logout-"));
+  const dispatchHome = path.join(tempDir, "dispatch");
+  await fs.mkdir(dispatchHome, { recursive: true });
+  await fs.writeFile(path.join(dispatchHome, "oauth.json"), "{}\n");
+  await fs.writeFile(path.join(dispatchHome, "config.json"), "{}\n");
+  await fs.writeFile(path.join(dispatchHome, "projects.json"), "{}\n");
+
+  const stdout = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["auth", "logout"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: () => {} },
+    env: {
+      PATH: process.env.PATH,
+      PREQSTATION_DISPATCH_HOME: dispatchHome,
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout.join("")), {
+    ok: true,
+    action: "logged_out",
+    oauth_path: path.join(dispatchHome, "oauth.json"),
+  });
+  await assert.rejects(fs.access(path.join(dispatchHome, "oauth.json")));
+  await assert.doesNotReject(fs.access(path.join(dispatchHome, "config.json")));
+  await assert.doesNotReject(fs.access(path.join(dispatchHome, "projects.json")));
+});
+
+test("whoami reports the current server-side identity blocker", async () => {
+  const stdout = [];
+  const stderr = [];
+  const exitCode = await runDispatcherCli({
+    argv: ["whoami"],
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: (value) => stderr.push(value) },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(JSON.parse(stdout.join("")).error.code, "auth_identity_unavailable");
+  assert.match(stderr.join(""), /auth_identity_unavailable/);
 });
 
 test("run passes comment-id flag through for comment objectives", async () => {

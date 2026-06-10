@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import { resolveDefaultUserHome } from "./project-mapping.mjs";
+import { readPreqstationConfig } from "./preqstation-config.mjs";
 
 const execFileAsync = promisify(execFile);
 const PREQSTATION_MCP_NAME = "preqstation";
@@ -286,6 +287,11 @@ export async function resolveDefaultPreqstationServerUrl({
     if (normalized) {
       return normalized;
     }
+  }
+
+  const configuredServerUrl = (await readPreqstationConfig({ env, readFile })).server_url;
+  if (configuredServerUrl) {
+    return configuredServerUrl;
   }
 
   const sharedOauthServerUrl = await readSharedOauthServerUrl({

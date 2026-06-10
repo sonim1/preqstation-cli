@@ -16,6 +16,13 @@ Environment variables:
 - `PREQSTATION_SERVER_URL` or `PREQSTATION_API_URL`: optional PREQSTATION server URL for `install`, `update`, and MCP-backed `setup auto`
 - `PREQSTATION_TOKEN`: optional bearer token override for MCP-backed `setup auto`; otherwise `~/.preqstation-dispatch/oauth.json` is reused or created through browser OAuth
 
+CLI auth config:
+
+- `preqstation auth login --server-url https://...` writes `~/.preqstation-dispatch/config.json`
+- `preqstation install` also persists the wizard server URL to that config file
+- Server URL discovery order is env vars, CLI config, shared `oauth.json`, then legacy runtime MCP registrations
+- `preqstation auth status` reports the inspected home, dispatch home, config path, OAuth path, and auth source
+
 Detached worker launches never inherit a Hermes profile home by accident. When no worker-home override is set, the dispatcher falls back to the owning user's real home so worker MCP auth can stay separate from Telegram-host profile state.
 
 Shared mapping file shape:
