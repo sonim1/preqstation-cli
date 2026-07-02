@@ -10,7 +10,7 @@ npx -y @sonim1/preqstation@latest auth status
 npx -y @sonim1/preqstation@latest status
 ```
 
-`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, CLI server URL config, and MCP-backed project setup. Agent runtime setup verifies CLI paths; it does not install worker skills. It also does not register native PREQ runtime MCP servers by default; use `preqstation install --with-mcp` only for legacy MCP installs. Run `preqstation auth status` and `preqstation status` afterward to verify the installed surface without changing anything.
+`preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, CLI server URL config, and project setup. Agent runtime setup verifies CLI paths; it does not install worker skills. It also does not register native PREQ runtime MCP servers by default; use `preqstation install --with-mcp` only for legacy MCP installs. Run `preqstation auth status` and `preqstation status` afterward to verify the installed surface without changing anything.
 
 ### Command Reference
 
@@ -31,7 +31,7 @@ npx -y @sonim1/preqstation@latest status
 | `preqstation doctor` | Read-only health check with the same status surface plus recommended next actions. |
 | `preqstation uninstall` | Remove installed entrypoints, legacy runtime MCP registrations, and legacy worker support while keeping local project mappings. |
 | `preqstation mcp disable codex` | Remove only a legacy PREQ MCP registration for one runtime. Use `preqstation uninstall codex` for legacy worker support cleanup. |
-| `preqstation setup auto` | Fetch PREQ projects through MCP and map them to local git checkouts. |
+| `preqstation setup auto` | Fetch PREQ projects through the configured PREQSTATION endpoint and map them to local git checkouts. |
 | `preqstation run ...` | Dispatch directly without OpenClaw or Hermes. |
 
 Configuration details live in [CONFIGURATION.md](CONFIGURATION.md).

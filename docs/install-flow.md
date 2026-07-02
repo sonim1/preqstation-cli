@@ -168,7 +168,7 @@ The final summary is partitioned into separate Clack boxes:
 
 The CLI summary includes:
 - version transitions such as `0.1.21 -> 0.1.25`
-- restart hints such as `openclaw gateway restart`
+- restart hints such as `openclaw gateway restart` or `hermes gateway restart`
 - unpublished local repo hints when local source is ahead of npm
 - failure details such as post-check errors
 
@@ -197,7 +197,7 @@ Interactive install currently behaves like this:
 5. install/sync selected hosts
 6. verify selected runtime CLI paths
 7. register runtime MCP endpoints only when `--with-mcp` is used
-8. run MCP-backed `setup auto`, opening browser OAuth when needed, to map PREQ projects to local git checkouts
+8. run `setup auto`, opening browser OAuth when needed, to map PREQ projects to local git checkouts
 9. print summary
 10. exit non-zero if any required post-check failed
 
@@ -206,7 +206,7 @@ Interactive install currently behaves like this:
 1. refresh installed OpenClaw/Hermes entrypoints
 2. inspect optional legacy worker skills
 3. inspect runtime CLI and legacy MCP health
-4. run MCP-backed `setup auto`
+4. run `setup auto`
 5. print the grouped update summary, including `Project Setup`
 
 Interactive uninstall is the matching cleanup flow:
