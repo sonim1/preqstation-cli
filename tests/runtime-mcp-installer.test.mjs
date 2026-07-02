@@ -534,3 +534,41 @@ test("inspectRuntimeMcpServers reports configured runtime MCP endpoints with sta
     },
   ]);
 });
+
+test("inspectRuntimeMcpServers treats current missing MCP messages as optional missing registrations", async () => {
+  const results = await inspectRuntimeMcpServers({
+    runtimes: ["claude-code", "codex", "gemini-cli"],
+    env: { PATH: process.env.PATH },
+    exec: async (command, args) => {
+      if (command === "claude" && args.join(" ") === "mcp get preqstation") {
+        const error = new Error(
+          'Command failed: claude mcp get preqstation\nNo MCP server named "preqstation". Configured servers: fastio\n',
+        );
+        error.stderr = 'No MCP server named "preqstation". Configured servers: fastio\n';
+        throw error;
+      }
+      if (command === "codex" && args.join(" ") === "mcp list") {
+        return {
+          stdout: "Name  Url  Bearer Token Env Var  Status  Auth\n",
+          stderr: "",
+        };
+      }
+      if (command === "gemini" && args.join(" ") === "mcp list") {
+        return {
+          stdout: "No MCP servers configured.\n",
+          stderr: "",
+        };
+      }
+      throw new Error(`Unexpected command: ${command} ${args.join(" ")}`);
+    },
+  });
+
+  assert.deepEqual(
+    results.map(({ ok, target, action, mcp_url }) => ({ ok, target, action, mcp_url })),
+    [
+      { ok: true, target: "claude-code", action: "mcp_missing", mcp_url: null },
+      { ok: true, target: "codex", action: "mcp_missing", mcp_url: null },
+      { ok: true, target: "gemini-cli", action: "mcp_missing", mcp_url: null },
+    ],
+  );
+});

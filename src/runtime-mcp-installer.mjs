@@ -49,7 +49,9 @@ const RUNTIME_MCP_INSTALLERS = {
       };
     },
     isMissingConfigError(error) {
-      return /No MCP server found with name:/iu.test(String(error?.stderr || error?.message || error));
+      return /No MCP server (?:found with name:|named\b)/iu.test(
+        String(error?.stderr || error?.message || error),
+      );
     },
   },
   codex: {
@@ -86,7 +88,7 @@ const RUNTIME_MCP_INSTALLERS = {
       };
     },
     isMissingConfigError(error) {
-      return /No MCP server named .* found\./iu.test(String(error?.stderr || error?.message || error));
+      return /No MCP server named\b/iu.test(String(error?.stderr || error?.message || error));
     },
   },
   "gemini-cli": {
