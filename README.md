@@ -40,6 +40,22 @@ This repository is the durable public PREQ CLI and dispatcher surface for PreqSt
 
 OpenClaw still loads this package through `openclaw.plugin.json` and root `index.mjs`. Worker lifecycle actions now run through the `preqstation` CLI rendered into `.preqstation-instructions.txt`; [`preqstation-skill`](https://github.com/sonim1/preqstation-skill) is legacy optional worker support that `status`, `doctor`, `update`, and `uninstall` can inspect or clean up.
 
+## Work Graph Boundary
+
+`preqstation` is the dispatcher command owned by this package. It prepares the local checkout,
+renders instructions, and launches the selected engine.
+
+Dispatched agents record v2 execution in the core app's Work Graph through the core package's
+`preqstation-agent` lifecycle CLI or through MCP tools. `preqstation-agent` owns commands such as
+`agent guide`, `graph node create`, `graph node complete`, `graph evidence attach`, and
+`graph memory append`; it also accepts `--metadata-file` so a harness can store
+`metadata.workflow_profile` with `resolved`, `resolved_command`, and `resolved_reason`.
+
+The Work Graph is the primary task execution view in the core app. The Kanban board remains the
+workflow-position view. See the core
+[Work Graph API documentation](https://github.com/sonim1/preqstation/blob/main/docs/API.md#work-graph-api-v2)
+for the route, MCP, and `preqstation-agent` contract.
+
 ## What It Does
 
 The dispatcher receives PREQ intent, resolves a local project checkout on the dispatcher host, creates or reuses an isolated git worktree, writes `.preqstation-instructions.txt`, and launches the selected engine as a detached process, including detached Codex runs. This is intentionally not the old PTY/background session model: it does not rely on OpenClaw `background:true` exec or `process action:poll` / `process action:log` for the dispatched coding run.
