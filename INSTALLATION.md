@@ -25,6 +25,22 @@ The installer is idempotent. Existing entrypoints and runtime CLI paths are repo
 
 Hermes must have terminal/tool execution enabled. A chat-only Hermes profile cannot create worktrees or launch local worker CLIs.
 
+## Work Graph Runtime Boundary
+
+This package owns the canonical `preqstation` dispatcher command. The dispatcher resolves local
+projects, prepares worktrees, writes `.preqstation-instructions.txt`, and launches Claude Code,
+Codex, or Gemini.
+
+The core app owns the Work Graph and the `preqstation-agent` lifecycle CLI used by dispatched
+agents. That CLI records execution with commands such as `agent guide`, `graph node create`,
+`graph node complete`, `graph evidence attach`, and `graph memory append`. Harnesses can pass a
+JSON `--metadata-file` to store `metadata.workflow_profile` with their resolved workflow choice.
+
+Use the dispatcher when setting up or launching work from an operator host. Use `preqstation-agent`
+inside the dispatched agent runtime when recording work graph nodes, evidence, workflow memory, or
+workflow profile metadata. The core contract is documented in
+[`preqstation/docs/API.md`](https://github.com/sonim1/preqstation/blob/main/docs/API.md#work-graph-api-v2).
+
 ## Global Install
 
 If you prefer a persistent local command:

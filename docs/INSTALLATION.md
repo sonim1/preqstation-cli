@@ -12,6 +12,20 @@ npx -y @sonim1/preqstation@latest status
 
 `preqstation install` is the default setup path. It opens an interactive wizard for request entrypoints, agent runtimes, CLI server URL config, and project setup. Agent runtime setup verifies CLI paths; it does not install worker skills. It also does not register native PREQ runtime MCP servers by default; use `preqstation install --with-mcp` only for legacy MCP installs. Run `preqstation auth status` and `preqstation status` afterward to verify the installed surface without changing anything.
 
+### Work Graph Runtime Boundary
+
+This package owns the canonical `preqstation` dispatcher command. It prepares the local project,
+worktree, instructions, and detached engine launch. The core app owns the Work Graph and the
+`preqstation-agent` lifecycle CLI used inside dispatched agent runs.
+
+`preqstation-agent` records work graph nodes, transitions, evidence, workflow memory, and
+`metadata.workflow_profile` through commands such as `agent guide`, `graph node create`,
+`graph node complete`, `graph evidence attach`, and `graph memory append`. Use `preqstation` to
+launch work from an operator host; use `preqstation-agent` when the running harness needs to record
+v2 Work Graph state. See the core
+[Work Graph API documentation](https://github.com/sonim1/preqstation/blob/main/docs/API.md#work-graph-api-v2)
+for the route, MCP, and metadata contract.
+
 ### Command Reference
 
 | Command | Use |

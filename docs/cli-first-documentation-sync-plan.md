@@ -24,6 +24,10 @@ The current canonical contract is:
 
 ## Progress Log
 
+- 2026-07-03: v2 Work Graph documentation sync started for `~/projects/preqstation-cli`.
+  - Added the dispatcher/agent boundary to README and installation docs: `preqstation` remains the canonical dispatcher command for operator-host setup and engine launch, while core `preqstation-agent` records Work Graph nodes, evidence, workflow memory, and `metadata.workflow_profile`.
+  - Pointed readers to the core Work Graph API contract for REST routes, MCP graph tools, and `preqstation-agent` lifecycle commands.
+  - Verification: `rtk npm test` passed with 194 tests.
 - 2026-06-10: Phase 1 completed for `~/projects/preqstation-cli`.
   - Updated published package docs to describe CLI-first setup, `~/.preqstation` state, optional legacy MCP registration, legacy worker support cleanup, the canonical Hermes skill path, and `hermes gateway restart` after skill changes.
   - Reframed `MEMORY.md` as a legacy/sample fallback rather than the default mapping source.
